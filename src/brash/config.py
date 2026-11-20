@@ -1,6 +1,7 @@
 """What a project sets for brash, in the `[tool.brash]` table of its `pyproject.toml`.
 
     [tool.brash]
+    ignore = ["general-params"]
     exclude = ["src/app/_generated", "*_pb2.py"]
 
     [tool.brash.codemods]
@@ -42,6 +43,13 @@ class Config(BaseModel):
 
     They run after brash's own, in the table's order.
     """
+    select: tuple[str, ...] | None = None
+    """The codemods that run, by name, brash's own or the project's: an allowlist. Every codemod, when it is not set.
+
+    They run in brash's order whatever the list's, and `--only` on the command line is taken in place of it.
+    """
+    ignore: tuple[str, ...] = ()
+    """The codemods that do not run, by name: a blocklist, taken from `select` or from every codemod."""
     exclude: tuple[str, ...] = ()
     """Files and directories no codemod rewrites, as glob patterns of paths relative to the project's directory.
 

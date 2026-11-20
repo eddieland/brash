@@ -36,6 +36,8 @@ class Rename(Command):
 class NotOne:
     """No codemod."""
 '''
+#: The start of a `pyproject.toml` that registers it, for a test to add `[tool.brash]`'s other settings to.
+CONFIGURED: Final = '[tool.brash]\ncodemods = { rename = "local_codemods.rename:Rename" }\n'
 BEFORE: Final = "OLD = 3\n"
 AFTER: Final = "from typing import Final\n\nNEW: Final = 3\n"
 
@@ -171,7 +173,7 @@ def test_an_entry_that_names_no_codemod_fails_the_run_and_says_which(project: Pa
         pytest.param("[tool]\nbrash = 3\n", "tool.brash: Input should be a valid dictionary", id="no table"),
         pytest.param(
             "[tool.brash]\ncodemod = {}\n",
-            "tool.brash.codemod: no such setting; there are `codemods`, `exclude`",
+            "tool.brash.codemod: no such setting; there are `codemods`, `select`, `ignore`, `exclude`",
             id="another key",
         ),
         pytest.param(
@@ -225,7 +227,7 @@ def test_everything_wrong_with_a_table_is_reported_at_once_each_with_the_file(pr
     assert sorted(line.removeprefix(f"{project / 'pyproject.toml'}: ") for line in str(raised.value).splitlines()) == [
         "tool.brash.codemods.rename: `nope` is not a `module:Class`",
         "tool.brash.exclude: Input should be a valid tuple",
-        "tool.brash.excludes: no such setting; there are `codemods`, `exclude`",
+        "tool.brash.excludes: no such setting; there are `codemods`, `select`, `ignore`, `exclude`",
     ]
 
 
@@ -264,3 +266,66 @@ def test_exclude_holds_from_a_directory_below_the_project_and_not_for_a_file_out
 
     assert (code, output) == (0, f"Rewrote {outside}\n")
     assert (project / "pkg" / "skipped.py").read_text() == BEFORE
+
+
+def test_ignore_turns_a_codemod_off_brashs_own_or_the_projects_and_the_others_run(project: Path) -> None:
+    stale = project / "stale.py"
+    stale.write_text(BEFORE)
+
+    configure(project, CONFIGURED + "ignore = ['rename']\n")
+    assert invoke("--check", stale)[1].count("+NEW") == 0
+    configure(project, CONFIGURED + "ignore = ['final-constants']\n")
+    assert invoke(stale)[0] == 0
+
+    assert stale.read_text() == "NEW = 3\n"
+
+
+def test_select_runs_the_codemods_it_names_alone_but_for_those_ignore_names(project: Path) -> None:
+    stale = project / "stale.py"
+    stale.write_text(BEFORE)
+
+    configure(project, CONFIGURED + "select = ['rename', 'final-constants', 'doc-comments']\nignore = ['rename']\n")
+    chosen = registry.selected(config.load(project), registry.registered(config.load(project)))
+    code, _ = invoke(stale)
+
+    assert chosen == ["final-constants", "doc-comments"]
+    assert code == 0
+    assert stale.read_text() == "from typing import Final\n\nOLD: Final = 3\n"
+
+
+def test_selecting_none_runs_none(project: Path) -> None:
+    stale = project / "stale.py"
+    stale.write_text(BEFORE)
+    configure(project, CONFIGURED + "select = []\n")
+
+    assert invoke("--check", stale) == (0, "")
+
+
+def test_only_is_taken_in_place_of_the_projects_choice_and_list_names_every_codemod(project: Path) -> None:
+    stale = project / "stale.py"
+    stale.write_text(BEFORE)
+    configure(project, CONFIGURED + "select = ['doc-comments']\nignore = ['rename']\n")
+
+    code, _ = invoke("--only", "rename", stale)
+    _, listed = invoke("--list")
+
+    assert code == 0
+    assert stale.read_text() == "NEW = 3\n"
+    assert [line.split()[0] for line in listed.splitlines()] == [*CODEMODS, "rename"]
+
+
+@pytest.mark.parametrize("setting", ["select", "ignore"])
+def test_a_choice_of_a_codemod_there_is_not_fails_the_run_and_names_those_there_are(
+    project: Path,
+    setting: str,
+) -> None:
+    configure(project, CONFIGURED + f"{setting} = ['final-constant']\n")
+    stale = project / "stale.py"
+    stale.write_text(BEFORE)
+
+    code, output = invoke(".")
+
+    assert code == 1
+    assert f"pyproject.toml: tool.brash.{setting}: `final-constant` is not a codemod; there are " in output
+    assert "`general-params`, `rename`" in output
+    assert stale.read_text() == BEFORE

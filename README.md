@@ -68,7 +68,8 @@ lint:
 	uv run brash --check .
 ```
 
-Every codemod runs by default, and there is no configuration to turn one off: name the ones you want with `--only`.
+Every codemod runs by default. A project turns one off, or names the few it wants, with `ignore` and `select` in
+its [configuration](#configuration); `--only` names the ones for a single run, and is taken in place of both.
 
 ## Configuration
 
@@ -76,12 +77,19 @@ A project configures brash in its `pyproject.toml`, under `[tool.brash]`. Every 
 
 ```toml
 [tool.brash]
+ignore = ["general-params"]
 exclude = ["src/app/_generated", "*_pb2.py"]
 
 [tool.brash.codemods]
 no-print = "codemods.no_print:NoPrint"
 ```
 
+- **`select`** is an allowlist: the codemods that run, by name, and no other. Left out, every codemod runs, so a
+  release of brash that adds one runs it; with `select`, a new one waits to be named.
+- **`ignore`** is a blocklist: the codemods that do not run. With both, a run has the codemods of `select` that
+  `ignore` does not name. Either takes your project's own codemods as it takes brash's, and a name no codemod has
+  fails the run. The order codemods run in is brash's, whatever the list's. `--only` on the command line is taken in
+  place of both, so it runs an ignored codemod, and `--list` lists every codemod, on or off.
 - **`exclude`** lists the files and directories no codemod rewrites, such as generated code, as glob patterns of
   paths relative to the directory that holds the `pyproject.toml`. A pattern excludes the file or directory it
   matches, and everything under that directory. Its `*` matches any run of characters, slashes among them, so
@@ -93,7 +101,7 @@ brash reads the nearest `pyproject.toml`, in the directory it runs from or one a
 or a value of the wrong type, fails the run with exit code 1 and a line for each, naming the file and the key:
 
 ```text
-Error: /repo/pyproject.toml: tool.brash.excludes: no such setting; there are `codemods`, `exclude`
+Error: /repo/pyproject.toml: tool.brash.excludes: no such setting; there are `codemods`, `select`, `ignore`, `exclude`
 ```
 
 ## As a git hook

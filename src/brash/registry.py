@@ -7,8 +7,9 @@ module that holds it and the class's name there:
     vocab-members = "codemods.vocab_members:VocabMembers"
 
 The module is imported as any other is, from the environment brash runs in or from the directory that holds the
-`pyproject.toml`, so a project's codemod need not be installed. The class is a `command.Command`. A project's
-codemods run after brash's own, in the order the table gives them. `config` reads the table.
+`pyproject.toml`, so a project's codemod need not be installed. The class is a `command.Command`. A project's codemods
+run after brash's own, in the order the table gives them. `config` reads the table, and its `select` and `ignore` there
+say which of them all a run leaves out.
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ from brash.general_params import GeneralParams
 from brash.type_aliases import TypeAliases
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Collection, Mapping
 
     from brash.config import Project
 
@@ -66,6 +67,29 @@ def registered(project: Project) -> dict[str, type[Command]]:
             raise RegistryError(f"{entry}: the name is one of brash's own")
         codemods[name] = _load(where, entry)
     return codemods
+
+
+def selected(project: Project, codemods: Collection[str]) -> list[str]:
+    """The codemods a run in a project runs by default: those its `select` names, or all, but for its `ignore`.
+
+    Args:
+        project: The project, whose `[tool.brash]` may hold either list.
+        codemods: Every codemod the run has by name, in the order they run on a file.
+
+    Returns:
+        The names, in that order.
+
+    Raises:
+        RegistryError: When either list names no codemod.
+    """
+    select, ignore = project.config.select, project.config.ignore
+    for setting, names in (("select", select or ()), ("ignore", ignore)):
+        for name in names:
+            if name not in codemods:
+                there = ", ".join(f"`{known}`" for known in codemods)
+                where = f"{project.root / CONFIG}" if project.root else CONFIG
+                raise RegistryError(f"{where}: tool.brash.{setting}: `{name}` is not a codemod; there are {there}")
+    return [name for name in codemods if (select is None or name in select) and name not in ignore]
 
 
 def _load(where: str, entry: str) -> type[Command]:
