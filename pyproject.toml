@@ -67,6 +67,8 @@ cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true 
 dev = [
     # Lints the GitHub workflows for correctness.
     "actionlint-py>=1.7.12.25",
+    # Runs the hooks in .pre-commit-hooks.yaml as a project that lists them would, in CI.
+    "prek>=0.5.11",
     "pyrefly>=1.4.1",
     "pytest>=9.2.0",
     "ruff>=0.17.5",
