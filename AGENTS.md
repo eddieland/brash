@@ -20,9 +20,10 @@ brash is a command line that rewrites Python with codemods, and checks that none
 
 - Python 3.12+. Package layout `src/brash/`. CLI entry point `brash`.
 - `uv` for everything: `uv sync`, `uv run`. `hatchling` builds it, and the version comes from the latest `v*` tag.
-- Runtime dependencies are `click`, for the command line (never argparse), and `libcst`. Adding a third makes every
-  project that installs brash install it too: do it only when the stdlib makes the code materially worse, and say why
-  in the PR. A dev-only tool gets a comment where it is configured saying what it is for.
+- Runtime dependencies are `click`, for the command line (never argparse), `libcst`, and `pydantic`, for
+  `[tool.brash]`: a setting is a field of `brash.config.Config`. Adding a fourth makes every project that installs
+  brash install it too: do it only when the stdlib makes the code materially worse, and say why in the PR. A
+  dev-only tool gets a comment where it is configured saying what it is for.
 - `make fmt`, then `make lint` and `make test`, before pushing: all three take seconds. `make check` is lint and test,
   and never rewrites files. CI runs the lint, and the tests under each supported Python.
 - `make fmt` runs brash on its own code first, then ruff (imports, trailing commas, format) and rumdl. `make lint`

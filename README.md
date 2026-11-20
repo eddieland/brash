@@ -47,7 +47,8 @@ brash --list                              # the codemods, brash's own and the pr
 
 A directory gives its `.py` files and its scripts that open with a Python shebang, but nothing under a hidden
 directory, `node_modules`, `site-packages`, a `venv`, or a build's output. A file named outright is taken as it is,
-whatever its name, which is how a git hook runs brash on a commit's files.
+whatever its name, which is how a git hook runs brash on a commit's files. Neither gives a file the project
+[excludes](#configuration).
 
 The exit code is 0 when there is nothing to report, 1 when `--check` found a file a codemod would rewrite or a file
 could not be rewritten (a syntax error, say, reported by name), and 2 for a usage error.
@@ -67,7 +68,41 @@ lint:
 	uv run brash --check .
 ```
 
-Every codemod runs by default, and there is no configuration to turn one off: name the ones you want with `--only`.
+Every codemod runs by default. A project turns one off, or names the few it wants, with `ignore` and `select` in
+its [configuration](#configuration); `--only` names the ones for a single run, and is taken in place of both.
+
+## Configuration
+
+A project configures brash in its `pyproject.toml`, under `[tool.brash]`. Every setting is optional:
+
+```toml
+[tool.brash]
+ignore = ["general-params"]
+exclude = ["src/app/_generated", "*_pb2.py"]
+
+[tool.brash.codemods]
+no-print = "codemods.no_print:NoPrint"
+```
+
+- **`select`** is an allowlist: the codemods that run, by name, and no other. Left out, every codemod runs, so a
+  release of brash that adds one runs it; with `select`, a new one waits to be named.
+- **`ignore`** is a blocklist: the codemods that do not run. With both, a run has the codemods of `select` that
+  `ignore` does not name. Either takes your project's own codemods as it takes brash's, and a name no codemod has
+  fails the run. The order codemods run in is brash's, whatever the list's. `--only` on the command line is taken in
+  place of both, so it runs an ignored codemod, and `--list` lists every codemod, on or off.
+- **`exclude`** lists the files and directories no codemod rewrites, such as generated code, as glob patterns of
+  paths relative to the directory that holds the `pyproject.toml`. A pattern excludes the file or directory it
+  matches, and everything under that directory. Its `*` matches any run of characters, slashes among them, so
+  `*_pb2.py` excludes such a file at any depth and `top.py` only the one beside the `pyproject.toml`. An excluded
+  file is left alone when it is named outright too, as a git hook names it.
+- **`codemods`** registers [your project's own codemods](#your-projects-own-codemods).
+
+brash reads the nearest `pyproject.toml`, in the directory it runs from or one above it. A setting it does not have,
+or a value of the wrong type, fails the run with exit code 1 and a line for each, naming the file and the key:
+
+```text
+Error: /repo/pyproject.toml: tool.brash.excludes: no such setting; there are `codemods`, `select`, `ignore`, `exclude`
+```
 
 ## As a git hook
 
@@ -170,9 +205,9 @@ command line takes, as the module that holds it and the class's name there:
 no-print = "codemods.no_print:NoPrint"
 ```
 
-brash reads the nearest `pyproject.toml`, in the directory it runs from or one above it. The module is imported as
-any other is: from the environment brash runs in, or from the directory that holds the `pyproject.toml`, which brash
-puts last on the import path, so `codemods/no_print.py` beside it is found without being installed. A project's
+The module is imported as any other is: from the environment brash runs in, or from the directory that holds the
+`pyproject.toml`, which brash puts last on the import path, so `codemods/no_print.py` beside it is found without
+being installed. A project's
 codemods run after brash's own, in the table's order, and `--only` and `--list` take them as they take brash's.
 
 The class is a `brash.command.Command`, which is a

@@ -26,11 +26,13 @@ classifiers = [
     "Typing :: Typed",
 ]
 requires-python = ">=3.12"
-# click for the command line, and libcst to rewrite a module and keep every comment and blank line it does not touch,
-# which the stdlib's ast cannot. Nothing else at run time.
+# click for the command line, libcst to rewrite a module and keep every comment and blank line it does not touch,
+# which the stdlib's ast cannot, and pydantic to read `[tool.brash]` as a typed model that says which key is wrong.
+# Nothing else at run time.
 dependencies = [
     "click>=8.5.1",
     "libcst>=1.9.0",
+    "pydantic>=2.14.4",
 ]
 
 [project.scripts]
