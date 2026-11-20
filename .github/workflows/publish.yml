@@ -1,0 +1,79 @@
+name: Publish
+
+# Pushing a `v*` tag is the whole release step: this builds the tag's wheel and sdist, whose version is the tag's
+# (pyproject.toml), and publishes them to PyPI. It holds no token: PyPI trusts this workflow, run from the `pypi`
+# environment of this repository, by OpenID Connect (https://docs.pypi.org/trusted-publishers/), so the trusted
+# publisher on PyPI must name this file and that environment.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+
+jobs:
+  # Without the permission to publish, so nothing the build or the tests run can.
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Every tag, since the version is read from them.
+      - name: Check out the tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      # No cache: a release restores nothing a run on another ref could have written.
+      - name: Set up uv and Python 3.12
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.12"
+          enable-cache: false
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Lint and test
+        run: make check
+
+      - name: Build the wheel and the sdist
+        run: uv build
+
+      # A tag that is not a version git can be counted from (v1, vNext) would build as some other version.
+      - name: Check that the version built is the tag's
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          ls dist
+          test -f "dist/brash-$version-py3-none-any.whl"
+          test -f "dist/brash-$version.tar.gz"
+
+      - name: Keep the distributions for the publish job
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: pypi
+      url: https://pypi.org/project/brash/
+    permissions:
+      # The OpenID Connect token PyPI exchanges for a short-lived upload token: the whole of the trusted publishing.
+      id-token: write
+    steps:
+      - name: Collect the distributions
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3

@@ -1,0 +1,175 @@
+[project]
+name = "brash"
+# From the latest v* tag: a tag is the only place a release's version is written.
+dynamic = ["version"]
+description = "Codemods that hold a Python codebase to its conventions: applied by your formatter step, checked by lint."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "eddieland" }]
+keywords = ["codemod", "formatter", "libcst", "linter", "refactoring", "typing"]
+# The license is the `license` expression above, so no `License ::` classifier (PEP 639). Python versions are the ones
+# CI runs on.
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: Software Development :: Quality Assurance",
+    "Typing :: Typed",
+]
+requires-python = ">=3.12"
+# click for the command line, and libcst to rewrite a module and keep every comment and blank line it does not touch,
+# which the stdlib's ast cannot. Nothing else at run time.
+dependencies = [
+    "click>=8.5.1",
+    "libcst>=1.9.0",
+]
+
+[project.scripts]
+brash = "brash:main"
+
+[project.urls]
+Homepage = "https://github.com/eddieland/brash"
+Repository = "https://github.com/eddieland/brash"
+Issues = "https://github.com/eddieland/brash/issues"
+
+[build-system]
+requires = ["hatchling", "uv-dynamic-versioning==0.14.1"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
+
+# 0.2.0 on the commit tagged v0.2.0; 0.2.1.dev3+1a2b3c4 three commits after it. A checkout with no tags in it (a
+# shallow clone) counts from 0.0.0, and one with no git at all builds as the fallback.
+[tool.uv-dynamic-versioning]
+vcs = "git"
+style = "pep440"
+bump = true
+fallback-version = "0.0.0"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/brash"]
+
+# The version is built from git, so a new commit or tag rebuilds the metadata, not only a changed pyproject.toml.
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true } }]
+
+[dependency-groups]
+dev = [
+    # Lints the GitHub workflows for correctness.
+    "actionlint-py>=1.7.12.25",
+    "pyrefly>=1.4.1",
+    "pytest>=9.2.0",
+    "ruff>=0.17.5",
+    # Lints and formats Markdown.
+    "rumdl>=0.3.4",
+    # Lints the GitHub workflows for security: every action pinned to a commit, triggers, token handling.
+    "zizmor>=1.32.0",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.format]
+# The codemods' test cases are Python snippets held as a codemod writes them, before ruff formats them.
+exclude = ["tests/cases/*.md"]
+
+[tool.ruff.lint]
+# Every stable rule. Opt out below with a reason, never by narrowing `select`. Preview rules stay off, except the
+# ones named in `extend-select`: they change between ruff releases, so selecting `ALL` of them would make a lockfile
+# bump a lint-policy change.
+select = ["ALL"]
+# A public function's Google docstring sections must match its body: a Returns section when it returns a value,
+# Yields when it yields, Raises for each exception it raises itself, and none it does not have. These rules are
+# preview-only, so `preview` is on and `explicit-preview-rules` keeps every other preview rule off. DOC502 (a
+# documented exception the body does not raise) is not here: a Raises section rightly names what a callee raises.
+preview = true
+explicit-preview-rules = true
+extend-select = [
+    # Docstring sections.
+    "DOC102", "DOC201", "DOC202", "DOC402", "DOC403", "DOC501", "D420",
+    # Likely bugs.
+    "B901", "B909", "PLE1141", "PLE4703", "PLW0244", "RUF045", "RUF056", "RUF065", "RUF066", "RUF071", "RUF072",
+    "RUF074", "RUF077",
+    # Complexity, beside the stable PLR09xx limits.
+    "PLR0904", "PLR0916", "PLR1702",
+    # Simpler spellings.
+    "B903", "FURB101", "FURB103", "FURB113", "FURB118", "FURB140", "FURB142", "FURB145", "FURB148", "FURB189",
+    "PLC2701", "PLC2801", "PLR6104", "PT029", "RUF031", "RUF038", "RUF039", "RUF047", "RUF050", "RUF052", "RUF055",
+    "RUF070", "TC008", "UP048", "UP051",
+]
+# COM812 (a trailing comma on every multi-line call, literal, and signature) stays on, though `ruff format` warns that
+# it may conflict: `make fmt` adds the commas before formatting, and the formatter then keeps one item per line.
+ignore = [
+    "CPY001",  # No per-file copyright headers.
+    "EM101",   # Building the message in a variable first only moves the string; tracebacks are readable as is.
+    "EM102",   # Same as EM101, for f-strings.
+    "PLR0913", # Keyword-only arguments are how we spell options; the count is not the problem.
+    "TC003",   # Stdlib imports cost nothing at runtime; TYPE_CHECKING blocks for them are noise.
+    "TRY003",  # A specific message on a small exception hierarchy beats one exception class per message.
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# Tests patch with unittest.mock, as context managers (AGENTS.md).
+"pytest.MonkeyPatch".msg = "Patch with `mock.patch`, `mock.patch.object`, or `mock.patch.dict` in a `with` block."
+# A mock is specced, so a call the real thing would refuse fails the test.
+"unittest.mock.Mock".msg = "Spec it: `mock.patch.object(..., autospec=True)` or `mock.create_autospec(...)`."
+"unittest.mock.MagicMock".msg = "Spec it: `mock.patch.object(..., autospec=True)` or `mock.create_autospec(...)`."
+"argparse".msg = "The command line is click."
+
+# `from unittest import mock`, then `mock.patch`, `mock.create_autospec`.
+[tool.ruff.lint.flake8-import-conventions]
+banned-from = ["unittest.mock"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    "ARG001",  # Fixtures requested only for their side effects (a project to run from).
+    "D1",      # Docstrings are optional in tests; test names are the documentation. One that is there is checked.
+    "DOC",     # Same as D: a test's docstring, when it has one, needs no sections.
+    "PLR0917", # pytest passes fixtures as positional arguments; a test's signature is its fixture list.
+    "PLR2004", # Expected exit codes and counts are clearer inline than as named constants.
+    "S101",    # pytest asserts.
+]
+# The command's docstring is its --help text, so a Raises section would print there.
+"src/brash/__init__.py" = ["DOC501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Every strictness option pytest has, and any it adds. A warning fails the test that raised it, so a deprecation is
+# fixed when it appears instead of when the dependency removes the API.
+strict = true
+filterwarnings = ["error"]
+
+# Strict preset. Tests are a package under the repository root and import their shared helpers from `tests.helpers`.
+[tool.pyrefly]
+preset = "strict"
+project-includes = ["src", "tests"]
+search-path = ["src", "."]
+
+# Markdown: every default rule. Tables and code blocks may run past the line length: neither can be wrapped.
+[tool.rumdl]
+line-length = 120
+
+[tool.rumdl.MD013]
+tables = false
+code-blocks = false
+
+[tool.rumdl.per-file-ignores]
+# An include of AGENTS.md, not a document.
+"CLAUDE.md" = ["MD041"]
