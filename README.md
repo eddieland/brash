@@ -1,5 +1,21 @@
 # brash
 
+[![CI][ci-badge]][ci]
+[![Documentation][docs-badge]][docs]
+[![PyPI][pypi-badge]][pypi]
+[![Python versions][python-badge]][pypi]
+[![License][license-badge]][license]
+
+[ci-badge]: https://github.com/eddieland/brash/actions/workflows/ci.yml/badge.svg?branch=main
+[ci]: https://github.com/eddieland/brash/actions/workflows/ci.yml?query=branch%3Amain
+[docs-badge]: https://readthedocs.org/projects/brash/badge/?version=latest
+[docs]: https://brash.readthedocs.io
+[pypi-badge]: https://img.shields.io/pypi/v/brash
+[pypi]: https://pypi.org/project/brash/
+[python-badge]: https://img.shields.io/pypi/pyversions/brash
+[license-badge]: https://img.shields.io/pypi/l/brash
+[license]: https://github.com/eddieland/brash/blob/main/LICENSE
+
 ![brash](https://github.com/user-attachments/assets/bf0d5df8-235d-4962-8e27-c2b6a32ae684)
 
 Codemods that hold a Python codebase to its conventions. A linter can only report that a module constant is not
