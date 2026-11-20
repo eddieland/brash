@@ -8,17 +8,17 @@ module that holds it and the class's name there:
 
 The module is imported as any other is, from the environment brash runs in or from the directory that holds the
 `pyproject.toml`, so a project's codemod need not be installed. The class is a `command.Command`. A project's
-codemods run after brash's own, in the order the table gives them.
+codemods run after brash's own, in the order the table gives them. `config` reads the table.
 """
 
 from __future__ import annotations
 
 import importlib
 import sys
-import tomllib
 from typing import TYPE_CHECKING, Final
 
 from brash.command import Command
+from brash.config import CONFIG
 from brash.doc_comments import DocComments
 from brash.final_constants import FinalConstants
 from brash.general_params import GeneralParams
@@ -26,7 +26,8 @@ from brash.type_aliases import TypeAliases
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
-    from pathlib import Path
+
+    from brash.config import Project
 
 #: brash's own codemods by name, in the order they run on a file.
 CODEMODS: Final[Mapping[str, type[Command]]] = {
@@ -35,62 +36,48 @@ CODEMODS: Final[Mapping[str, type[Command]]] = {
     "doc-comments": DocComments,
     "general-params": GeneralParams,
 }
-#: The file a project registers its codemods in, and the table there that names them.
-CONFIG: Final = "pyproject.toml"
-TABLE: Final = "tool.brash.codemods"
 
 
 class RegistryError(Exception):
     """A project's `pyproject.toml` registers a codemod that cannot be loaded."""
 
 
-def registered(start: Path) -> dict[str, type[Command]]:
-    """Every codemod a run from the directory `start` has: brash's own, then the project's.
+def registered(project: Project) -> dict[str, type[Command]]:
+    """Every codemod a run in a project has: brash's own, then those its `[tool.brash.codemods]` registers.
 
-    The project is the nearest directory, `start` or one above it, that holds a `pyproject.toml`. It is put on the
-    import path, last, so a codemod's module there is found without being installed.
+    The project's directory is put on the import path, last, so a codemod's module there is found without being
+    installed.
 
     Returns:
         Each codemod by name, in the order they run on a file.
 
     Raises:
-        RegistryError: When the file does not parse, or an entry in its table names no codemod.
+        RegistryError: When an entry takes the name of one of brash's own, or names no codemod.
     """
     codemods = dict(CODEMODS)
-    config = next((d / CONFIG for d in (start, *start.parents) if (d / CONFIG).is_file()), None)
-    if config is None:
+    if project.root is None:
         return codemods
-    try:
-        with config.open("rb") as stream:
-            brash: object = tomllib.load(stream).get("tool", {}).get("brash", {})
-    except (OSError, tomllib.TOMLDecodeError) as e:
-        raise RegistryError(f"{config}: {e}") from e
-    if not isinstance(brash, dict) or brash.keys() - {"codemods"}:
-        raise RegistryError(f"{config}: [tool.brash] holds one key, `codemods`")
-    table: object = brash.get("codemods", {})
-    if not isinstance(table, dict):
-        raise RegistryError(f"{config}: [{TABLE}] is a table of names, each with its `module:Class`")
-    if table and str(config.parent) not in sys.path:
-        sys.path.append(str(config.parent))
+    table = project.config.codemods
+    if table and str(project.root) not in sys.path:
+        sys.path.append(str(project.root))
     for name, where in table.items():
+        entry = f"{project.root / CONFIG}: tool.brash.codemods.{name}"
         if name in CODEMODS:
-            raise RegistryError(f"{config}: [{TABLE}] names `{name}`, which is one of brash's own")
-        codemods[str(name)] = _load(where, f"{config}: [{TABLE}] {name}")
+            raise RegistryError(f"{entry}: the name is one of brash's own")
+        codemods[name] = _load(where, entry)
     return codemods
 
 
-def _load(where: object, entry: str) -> type[Command]:
+def _load(where: str, entry: str) -> type[Command]:
     """Import the codemod an entry names as `module:Class`.
 
     Returns:
         The class.
 
     Raises:
-        RegistryError: When the entry is not of that form, the module does not import, or the name is no codemod.
+        RegistryError: When the module does not import, or the name is no codemod.
     """
-    module, _, name = where.partition(":") if isinstance(where, str) else ("", "", "")
-    if not module or not name:
-        raise RegistryError(f"{entry}: `{where}` is not a `module:Class`")
+    module, _, name = where.partition(":")
     try:
         found: object = getattr(importlib.import_module(module), name, None)
     except Exception as e:

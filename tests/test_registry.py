@@ -1,4 +1,4 @@
-"""The codemods a project registers in its `pyproject.toml`: found, listed, run after brash's own, and refused."""
+"""What a project sets in its `pyproject.toml`: its codemods found, listed, run and refused, and its files excluded."""
 
 import contextlib
 import sys
@@ -10,7 +10,8 @@ from unittest import mock
 import pytest
 from click.testing import CliRunner
 
-from brash import main, registry
+from brash import config, main, registry
+from brash.config import ConfigError
 from brash.registry import CODEMODS, RegistryError
 
 #: A project's codemod, which renames the constant `OLD`, and so runs on what `final-constants` wrote.
@@ -59,14 +60,14 @@ def configure(project: Path, text: str) -> None:
 
 
 def test_a_directory_with_no_project_above_it_has_brashs_own_codemods(tmp_path: Path) -> None:
-    with mock.patch.object(registry, "CONFIG", "no-such-file.toml"):
-        assert registry.registered(tmp_path) == dict(CODEMODS)
+    with mock.patch.object(config, "CONFIG", "no-such-file.toml"):
+        assert registry.registered(config.load(tmp_path)) == dict(CODEMODS)
 
 
 def test_a_project_that_registers_none_has_brashs_own_and_its_directory_is_not_imported_from(project: Path) -> None:
     configure(project, '[project]\nname = "plain"\n')
 
-    assert registry.registered(project) == dict(CODEMODS)
+    assert registry.registered(config.load(project)) == dict(CODEMODS)
     assert str(project) not in sys.path
 
 
@@ -74,7 +75,7 @@ def test_a_projects_codemods_come_after_brashs_own_from_any_directory_below_it(p
     below = project / "src" / "pkg"
     below.mkdir(parents=True)
 
-    found = registry.registered(below)
+    found = registry.registered(config.load(below))
 
     assert list(found) == [*CODEMODS, "rename"]
     assert found["rename"].__module__ == "local_codemods.rename"
@@ -124,22 +125,13 @@ def test_a_projects_codemod_runs_over_many_files_as_over_few(project: Path) -> N
 
 
 @pytest.mark.parametrize(
-    ("config", "message"),
+    ("text", "message"),
     [
-        pytest.param("[tool.brash", "pyproject.toml: ", id="not TOML"),
-        pytest.param("[tool.brash]\ncodemod = {}\n", "[tool.brash] holds one key, `codemods`", id="another key"),
-        pytest.param("[tool.brash]\ncodemods = ['m:C']\n", "is a table of names", id="a list"),
         pytest.param(
             "[tool.brash.codemods]\ndoc-comments = 'local_codemods.rename:Rename'\n",
-            "names `doc-comments`, which is one of brash's own",
+            "tool.brash.codemods.doc-comments: the name is one of brash's own",
             id="one of brash's names",
         ),
-        pytest.param(
-            "[tool.brash.codemods]\nrename = 'local_codemods.rename'\n",
-            "rename: `local_codemods.rename` is not a `module:Class`",
-            id="no class",
-        ),
-        pytest.param("[tool.brash.codemods]\nrename = 3\n", "rename: `3` is not a `module:Class`", id="not a string"),
         pytest.param(
             "[tool.brash.codemods]\nrename = 'local_codemods.missing:Rename'\n",
             "importing `local_codemods.missing` failed: ModuleNotFoundError",
@@ -157,16 +149,118 @@ def test_a_projects_codemod_runs_over_many_files_as_over_few(project: Path) -> N
         ),
     ],
 )
-def test_an_entry_that_names_no_codemod_fails_the_run_and_says_which(project: Path, config: str, message: str) -> None:
-    configure(project, config)
+def test_an_entry_that_names_no_codemod_fails_the_run_and_says_which(project: Path, text: str, message: str) -> None:
+    configure(project, text)
     stale = project / "stale.py"
     stale.write_text(BEFORE)
 
     with pytest.raises(RegistryError) as raised:
-        registry.registered(project)
+        registry.registered(config.load(project))
     code, output = invoke(".")
 
     assert message in str(raised.value)
     assert code == 1
     assert message in output
     assert stale.read_text() == BEFORE
+
+
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        pytest.param("[tool.brash", "pyproject.toml: ", id="not TOML"),
+        pytest.param("[tool]\nbrash = 3\n", "tool.brash: Input should be a valid dictionary", id="no table"),
+        pytest.param(
+            "[tool.brash]\ncodemod = {}\n",
+            "tool.brash.codemod: no such setting; there are `codemods`, `exclude`",
+            id="another key",
+        ),
+        pytest.param(
+            "[tool.brash]\ncodemods = ['m:C']\n",
+            "tool.brash.codemods: Input should be a valid dictionary",
+            id="a list of codemods",
+        ),
+        pytest.param(
+            "[tool.brash.codemods]\nrename = 'local_codemods.rename'\n",
+            "tool.brash.codemods.rename: `local_codemods.rename` is not a `module:Class`",
+            id="no class",
+        ),
+        pytest.param(
+            "[tool.brash.codemods]\nrename = 3\n",
+            "tool.brash.codemods.rename: Input should be a valid string",
+            id="not a string",
+        ),
+        pytest.param(
+            "[tool.brash]\nexclude = 'build'\n",
+            "tool.brash.exclude: Input should be a valid tuple",
+            id="one pattern, not a list",
+        ),
+        pytest.param(
+            "[tool.brash]\nexclude = ['build', 3]\n",
+            "tool.brash.exclude.1: Input should be a valid string",
+            id="a pattern that is no string",
+        ),
+    ],
+)
+def test_a_table_brash_does_not_take_fails_the_run_and_says_where(project: Path, text: str, message: str) -> None:
+    configure(project, text)
+    stale = project / "stale.py"
+    stale.write_text(BEFORE)
+
+    with pytest.raises(ConfigError) as raised:
+        config.load(project)
+    code, output = invoke(".")
+
+    assert message in str(raised.value)
+    assert code == 1
+    assert message in output
+    assert stale.read_text() == BEFORE
+
+
+def test_everything_wrong_with_a_table_is_reported_at_once_each_with_the_file(project: Path) -> None:
+    configure(project, "[tool.brash]\nexclude = 3\nexcludes = []\ncodemods = { rename = 'nope' }\n")
+
+    with pytest.raises(ConfigError) as raised:
+        config.load(project)
+
+    assert sorted(line.removeprefix(f"{project / 'pyproject.toml'}: ") for line in str(raised.value).splitlines()) == [
+        "tool.brash.codemods.rename: `nope` is not a `module:Class`",
+        "tool.brash.exclude: Input should be a valid tuple",
+        "tool.brash.excludes: no such setting; there are `codemods`, `exclude`",
+    ]
+
+
+def test_excluded_files_are_left_alone_found_or_named_outright_and_others_are_rewritten(project: Path) -> None:
+    configure(project, "[tool.brash]\nexclude = ['pkg/_generated/', '*_pb2.py', 'top.py']\n")
+    names = ("pkg/_generated/deep/a.py", "pkg/wire/b_pb2.py", "top.py", "pkg/top.py", "pkg/c.py")
+    for name in names:
+        (project / name).parent.mkdir(parents=True, exist_ok=True)
+        (project / name).write_text(BEFORE)
+
+    code, output = invoke(".", "top.py", "pkg/wire/b_pb2.py")
+
+    assert code == 0
+    assert output == "Rewrote pkg/c.py\nRewrote pkg/top.py\n"
+    assert {name: (project / name).read_text() == BEFORE for name in names} == {
+        "pkg/_generated/deep/a.py": True,
+        "pkg/wire/b_pb2.py": True,
+        "top.py": True,
+        "pkg/top.py": False,
+        "pkg/c.py": False,
+    }
+
+
+def test_exclude_holds_from_a_directory_below_the_project_and_not_for_a_file_outside_it(
+    project: Path,
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    configure(project, "[tool.brash]\nexclude = ['pkg/skipped.py']\n")
+    (project / "pkg").mkdir()
+    (project / "pkg" / "skipped.py").write_text(BEFORE)
+    outside = tmp_path_factory.mktemp("outside") / "skipped.py"
+    outside.write_text(BEFORE)
+
+    with contextlib.chdir(project / "pkg"):
+        code, output = invoke("skipped.py", outside)
+
+    assert (code, output) == (0, f"Rewrote {outside}\n")
+    assert (project / "pkg" / "skipped.py").read_text() == BEFORE
