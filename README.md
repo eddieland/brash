@@ -177,7 +177,9 @@ make test    # pytest
 ```
 
 [AGENTS.md](https://github.com/eddieland/brash/blob/main/AGENTS.md) holds the conventions. A release is a `v*` tag:
-the Publish workflow builds it, with the tag as its version, and publishes it to PyPI.
+the Publish workflow builds it, with the tag as its version, and publishes it to PyPI. The Tag workflow, run by hand,
+creates the tag on the head of `main` or a branch it is given: the next major, minor or patch version, or an exact
+tag.
 
 ## License
 

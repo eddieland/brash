@@ -4,9 +4,14 @@ name: Publish
 # (pyproject.toml), and publishes them to PyPI. It holds no token: PyPI trusts this workflow, run from the `pypi`
 # environment of this repository, by OpenID Connect (https://docs.pypi.org/trusted-publishers/), so the trusted
 # publisher on PyPI must name this file and that environment.
+#
+# The Tag workflow starts this one by `workflow_dispatch` on the tag it created, since a tag pushed with a workflow's
+# own token sends no push event. Started by hand on a branch, the build fails at the version check and nothing is
+# published.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: read

@@ -1,0 +1,90 @@
+name: Tag
+
+# Run by hand, this tags the head of a branch as the next release and starts the Publish workflow on the tag. The
+# next version is the highest `vMAJOR.MINOR.PATCH` tag with one part raised, 0.0.0 where there is none yet, or the
+# exact tag typed in.
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: The part of the highest version tag to raise
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      tag:
+        description: An exact tag to create in place of the bump, such as v1.0.0rc1
+        type: string
+      branch:
+        description: The branch whose head is tagged
+        type: string
+        default: main
+
+permissions: {}
+
+# One at a time, so two runs cannot both read the same highest tag.
+concurrency:
+  group: ${{ github.workflow }}
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      # To create the tag.
+      contents: write
+      # To start the Publish workflow: a tag this workflow's token creates sends no push event to start it.
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      # Every tag, to find the highest. The tag is created through the API, so git keeps no credentials.
+      - name: Check out the branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.branch }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Choose the tag
+        id: choose
+        env:
+          BUMP: ${{ inputs.bump }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          if [[ -n $TAG ]]; then
+            tag=$TAG
+            if [[ ! $tag =~ ^v[0-9] ]] || ! git check-ref-format "refs/tags/$tag"; then
+              echo "::error::'$tag' is not a tag like v1.2.3"
+              exit 1
+            fi
+          else
+            latest=$(git tag --list 'v*' --sort=-version:refname | grep -E -m 1 '^v[0-9]+\.[0-9]+\.[0-9]+$' || true)
+            IFS=. read -r major minor patch <<< "${latest:-v0.0.0}"
+            major=${major#v}
+            case $BUMP in
+              major) tag="v$((major + 1)).0.0" ;;
+              minor) tag="v$major.$((minor + 1)).0" ;;
+              patch) tag="v$major.$minor.$((patch + 1))" ;;
+              *) echo "::error::'$BUMP' is not major, minor or patch"; exit 1 ;;
+            esac
+            echo "The highest version tag is ${latest:-not there yet}."
+          fi
+          if git rev-parse --quiet --verify "refs/tags/$tag" > /dev/null; then
+            echo "::error::The tag $tag already exists"
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Create the tag
+        env:
+          TAG: ${{ steps.choose.outputs.tag }}
+          BRANCH: ${{ inputs.branch }}
+        run: |
+          sha=$(git rev-parse HEAD)
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$TAG" -f "sha=$sha" --silent
+          echo "Tagged \`$sha\`, the head of \`$BRANCH\`, as \`$TAG\`." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Start the Publish workflow on the tag
+        env:
+          TAG: ${{ steps.choose.outputs.tag }}
+        run: gh workflow run publish.yml --ref "$TAG"
