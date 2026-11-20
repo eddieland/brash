@@ -152,6 +152,65 @@ A rewrite to run once, such as a migration off an API, needs no entry: LibCST's 
 [`python -m libcst.tool codemod`](https://libcst.readthedocs.io/en/latest/codemods_tutorial.html) runs it, and you
 commit the result.
 
+### An example: canopy's `vocab-members`
+
+[canopy](https://github.com/eddieland/canopy) keeps its statuses, kinds, and phases as `StrEnum`s in one module,
+`core/vocab.py`. A member of a `StrEnum` is the string it holds, so `run.status == "running"` type-checks and works,
+and no linter catches the bare string where the code is meant to name the member. canopy's own codemod rewrites it:
+
+```python
+if run.status == "running":           # before
+if run.status == RunStatus.RUNNING:   # after, with RunStatus imported
+```
+
+It is one module, [`codemods/vocab_members.py`](https://github.com/eddieland/canopy/blob/main/codemods/vocab_members.py),
+at the root of canopy's repository, and one entry in its `pyproject.toml`:
+
+```toml
+[tool.brash.codemods]
+vocab-members = "codemods.vocab_members:VocabMembers"
+```
+
+Three things in it are worth copying:
+
+- **It reads the project, without importing it.** The vocabularies are whatever `core/vocab.py` holds today, read
+  with the stdlib's `ast` from a path relative to the codemod's own file. A new member needs no change to the codemod,
+  and nothing of canopy is imported or run to lint it.
+- **It says which files are its own.** `covers(filename)` is true under `src/canopy` alone: the tests assert on the
+  string on purpose, and the vocabulary's own module defines it.
+- **It rewrites only what it can tie down.** A string becomes a member where the other side of the comparison is
+  annotated with one vocabulary, or is a field of a typed row. A string several vocabularies hold, with nothing to
+  say which is meant, is left alone, as is any string outside a comparison.
+
+Its tests are before-and-after snippets in Markdown, the same shape as brash's own in `tests/cases/`.
+
+### Other things a project's codemod can do
+
+A codemod of your own fits wherever a review comment keeps being written and the fix is always the same edit. It
+sees one module at a time, as text and syntax, and may read other files of the project to learn its names.
+
+- **Keep a migration finished.** Once every caller has moved from `old_client.get(...)` to `client.fetch(...)`, a
+  codemod that rewrites the old call keeps a new one from landing: the lint fails with the fix as its diff.
+- **Send calls through the project's own seam.** `subprocess.run(...)` becomes `procs.run(...)`, `datetime.now()`
+  becomes `clock.now()`, `print(...)` becomes `log.info(...)`: wherever the project has one module that is allowed
+  to touch something and wants every other module to go through it.
+- **Name a constant where a string is repeated.** Feature flags, config keys, route names, metric names: read the
+  names from the module or file that declares them, as `vocab-members` does, and rewrite the bare string that
+  equals one, in the calls that take them.
+- **Import from the public module.** Rewrite `from app.billing._internal import Invoice` to
+  `from app.billing import Invoice` where the package re-exports the name, so a private module can move.
+- **Hold tests to one way of doing a thing.** `from unittest.mock import patch` becomes `from unittest import mock`
+  with `mock.patch` at each use; a `time.sleep` in a test becomes the project's `wait_until`. `covers` holds it to
+  `tests/`.
+- **Spell a framework's idiom one way.** A logging call with an f-string becomes one with `%s` arguments; a
+  `@pytest.fixture()` loses its empty parentheses; a `Depends(get_db)` parameter gets the project's `Annotated`
+  alias.
+- **Add what every module must have.** A `from __future__ import annotations`, a license header, a module logger
+  named for `__name__`.
+
+What does not fit: a rewrite that needs to know a value's type across modules, which is a type checker's question,
+and one that changes what the code does in a way a person should decide each time.
+
 ## Adding a codemod to brash
 
 A codemod belongs in brash when it holds code to a convention any Python project could adopt, and reads nothing but
