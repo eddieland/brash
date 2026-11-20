@@ -51,6 +51,54 @@ lint:
 
 Every codemod runs by default, and there is no configuration to turn one off: name the ones you want with `--only`.
 
+## As a git hook
+
+brash is a hook for [pre-commit](https://pre-commit.com) and [prek](https://prek.j178.dev), which read the same
+`.pre-commit-config.yaml`. List it before the formatter's hooks, for the reason it runs before the formatter:
+
+```yaml
+repos:
+  - repo: https://github.com/eddieland/brash
+    rev: v0.2.0 # the latest release
+    hooks:
+      - id: brash
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.5
+    hooks:
+      - id: ruff-check
+        args: [--select, I, --fix]
+      - id: ruff-format
+```
+
+`brash` rewrites the commit's Python files, and the runner stops the commit where one changed, for you to stage.
+`brash-check` changes nothing and fails with the diff, for a run in CI. Either takes `args: [--only, final-constants]`.
+In prek, a hook given a `priority` runs alongside the others that share it: give brash a lower one than the formatter.
+
+The hook runs in an environment of its own, which holds brash and nothing of your project:
+
+- **Your project's codemods run too**, read from the working tree as the command line reads them. One that imports a
+  package other than `libcst` and `brash` names it in the hook's `additional_dependencies`. One that imports your
+  project as installed needs your environment, which is a local hook:
+
+  ```yaml
+  repos:
+    - repo: local
+      hooks:
+        - id: brash
+          name: brash
+          entry: uv run brash
+          language: system
+          types: [python]
+          require_serial: true
+  ```
+
+- **The `pyproject.toml` is the one at the repository's root**, where a hook runs, so codemods registered in one
+  below it, in `backend/pyproject.toml`, are not run. prek runs a hook from the directory of the configuration that
+  names it: give `backend/` a `.pre-commit-config.yaml` of its own. For pre-commit, make the local hook's entry
+  `bash -c 'cd backend && uv run brash "${@#backend/}"' --`, with `files: ^backend/`.
+
+- **It needs Python 3.12 or later**: where the runner's default is older, set the hook's `language_version`.
+
 ## The codemods
 
 - **`final-constants`** annotates every module constant `Final`, so the type checker refuses a second assignment:

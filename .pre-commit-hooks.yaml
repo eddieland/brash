@@ -1,0 +1,16 @@
+# The hooks brash gives pre-commit and prek. Both take the commit's Python files, and neither is split across
+# processes by the runner: brash starts its own.
+- id: brash
+  name: brash
+  description: Rewrite Python with brash's codemods, and the project's own.
+  entry: brash
+  language: python
+  types: [python]
+  require_serial: true
+- id: brash-check
+  name: brash (check)
+  description: Change nothing; fail with the diff a codemod would make.
+  entry: brash --check
+  language: python
+  types: [python]
+  require_serial: true

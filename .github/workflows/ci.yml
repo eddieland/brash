@@ -42,6 +42,10 @@ jobs:
       - name: Lint
         run: make lint
 
+      # Both hooks of .pre-commit-hooks.yaml, as prek installs them from this commit, over brash's own code.
+      - name: Run the git hooks
+        run: uv run prek try-repo . --all-files
+
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
