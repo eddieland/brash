@@ -1,5 +1,7 @@
 # brash
 
+<img width="1774" height="887" alt="3FC23AEF-0B97-4152-AE50-FF3F8D7CF196" src="https://github.com/user-attachments/assets/bf0d5df8-235d-4962-8e27-c2b6a32ae684" />
+
 Codemods that hold a Python codebase to its conventions. A linter can only report that a module constant is not
 `Final` or that a parameter is typed `list` where `Iterable` would do; brash rewrites the file. It is built on
 [LibCST](https://libcst.readthedocs.io), which keeps every comment and blank line a rewrite does not touch.
