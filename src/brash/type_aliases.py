@@ -35,8 +35,8 @@ from typing import Final, override
 
 import libcst as cst
 
-from canopy_codemods.command import Command
-from canopy_codemods.final_constants import CONSTANT, DECLARES, Bindings, last_name
+from brash.command import Command
+from brash.final_constants import CONSTANT, DECLARES, Bindings, last_name
 
 #: What the text of a module with an alias to rewrite must hold: a capitalised name assigned at the margin.
 ASSIGNED: Final = re.compile(r"^_*[A-Z]\w*[ \t]*=[^=]", re.MULTILINE)

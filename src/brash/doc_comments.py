@@ -35,8 +35,8 @@ from typing import TYPE_CHECKING, Final, override
 
 import libcst as cst
 
-from canopy_codemods.command import Command
-from canopy_codemods.final_constants import last_name
+from brash.command import Command
+from brash.final_constants import last_name
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Sequence

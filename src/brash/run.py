@@ -16,10 +16,12 @@ from typing import TYPE_CHECKING, Final
 from libcst.codemod import CodemodContext, TransformExit, TransformFailure, TransformSkip, TransformSuccess
 from libcst.codemod import transform_module as apply
 
-from canopy_codemods.registry import CODEMODS
+from brash.registry import CODEMODS
 
 if TYPE_CHECKING:
-    from collections.abc import Collection, Iterable, Sequence
+    from collections.abc import Collection, Iterable, Mapping, Sequence
+
+    from brash.command import Command
 
 #: Directories never searched, beside the hidden ones: other tools' files, and what a build leaves behind.
 PRUNED: Final = frozenset({"__pycache__", "build", "dist", "node_modules", "site-packages", "venv"})
@@ -54,21 +56,26 @@ class Rewrite:
         return "".join(difflib.unified_diff(before, after, str(self.path), str(self.path)))
 
 
-def rewrite_all(paths: Iterable[Path], names: Sequence[str]) -> list[Rewrite]:
+def rewrite_all(
+    paths: Iterable[Path],
+    names: Sequence[str],
+    codemods: Mapping[str, type[Command]] = CODEMODS,
+) -> list[Rewrite]:
     """Run the codemods named over every Python file under `paths`, changing none.
 
     Args:
         paths: Files, taken as Python whatever their names, and directories, searched for it.
-        names: The codemods to run, of `registry.CODEMODS`, in order.
+        names: The codemods to run, of `codemods`, in order.
+        codemods: Each codemod there is by name: brash's own, unless a project's are given with them.
 
     Returns:
         A rewrite for each file, in the files' order.
     """
     found = files(paths)
     if len(found) < _SERIAL:
-        return [rewrite_file(path, names) for path in found]
+        return [rewrite_file(path, names, codemods) for path in found]
     with ProcessPoolExecutor() as pool:
-        return list(pool.map(rewrite_file, found, [names] * len(found), chunksize=16))
+        return list(pool.map(rewrite_file, found, [names] * len(found), [codemods] * len(found), chunksize=16))
 
 
 def files(paths: Iterable[Path]) -> list[Path]:
@@ -91,7 +98,7 @@ def files(paths: Iterable[Path]) -> list[Path]:
     return sorted(found)
 
 
-def rewrite_file(path: Path, names: Collection[str]) -> Rewrite:
+def rewrite_file(path: Path, names: Collection[str], codemods: Mapping[str, type[Command]] = CODEMODS) -> Rewrite:
     """Run the codemods named over the file at `path`, without changing it.
 
     Returns:
@@ -102,7 +109,7 @@ def rewrite_file(path: Path, names: Collection[str]) -> Rewrite:
     except (OSError, UnicodeDecodeError) as e:
         return Rewrite(path, "", "", error=str(e))
     try:
-        return Rewrite(path, before, rewrite(before, names, filename=str(path)))
+        return Rewrite(path, before, rewrite(before, names, filename=str(path), codemods=codemods))
     except CodemodError as e:
         return Rewrite(path, before, before, error=str(e))
 
@@ -111,8 +118,14 @@ class CodemodError(Exception):
     """A codemod could not run on a module: it does not parse, or the codemod itself failed."""
 
 
-def rewrite(source: str, names: Iterable[str], *, filename: str | None = None) -> str:
-    """Run the codemods named over a module's text, each on what the one before it made.
+def rewrite(
+    source: str,
+    names: Iterable[str],
+    *,
+    filename: str | None = None,
+    codemods: Mapping[str, type[Command]] = CODEMODS,
+) -> str:
+    """Run the codemods named, of `codemods`, over a module's text, each on what the one before it made.
 
     Returns:
         The module's text after the last of them.
@@ -121,7 +134,7 @@ def rewrite(source: str, names: Iterable[str], *, filename: str | None = None) -
         CodemodError: When one of them could not run.
     """
     for name in names:
-        codemod = CODEMODS[name]
+        codemod = codemods[name]
         if not codemod.covers(filename) or not codemod.wants(source):
             continue
         result = apply(codemod(CodemodContext(filename=filename)), source)

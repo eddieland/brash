@@ -46,7 +46,7 @@ NAMES: Final[Sequence[str]] = ()
 
 ### Joins the import of typing
 
-Unsorted, as libcst adds it: ruff sorts it next (`make fmt`).
+Unsorted, as libcst adds it: ruff sorts it next.
 
 ```python
 from typing import Any

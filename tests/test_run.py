@@ -4,9 +4,10 @@ from pathlib import Path
 from typing import Final
 
 import pytest
-from canopy_codemods import main, run
-from canopy_codemods.registry import CODEMODS
 from click.testing import CliRunner
+
+from brash import main, run
+from brash.registry import CODEMODS
 
 BEFORE: Final = "LIMIT = 3\n"
 AFTER: Final = "from typing import Final\n\nLIMIT: Final = 3\n"
@@ -59,7 +60,7 @@ def test_check_prints_the_diff_and_fails_and_changes_nothing(tmp_path: Path) -> 
     assert code == 1
     assert f"+++ {stale}" in output
     assert "-LIMIT = 3\n+from typing import Final\n+\n+LIMIT: Final = 3\n" in output
-    assert "1 file would be rewritten; run `make fmt`" in output
+    assert "1 file would be rewritten; run `brash` without `--check`" in output
     assert stale.read_text() == BEFORE
 
 

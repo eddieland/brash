@@ -3,10 +3,10 @@
 from typing import Final
 
 import pytest
-from canopy_codemods import run
-from canopy_codemods.final_constants import FinalConstants, constants
 
-from tests.canopy_codemods.helpers import cases
+from brash import run
+from brash.final_constants import FinalConstants, constants
+from tests.helpers import cases
 
 NAME: Final = "final-constants"
 CASES: Final = cases(NAME)

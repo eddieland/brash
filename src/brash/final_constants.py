@@ -27,7 +27,7 @@ from typing import Final, override
 import libcst as cst
 from libcst.codemod.visitors import AddImportsVisitor
 
-from canopy_codemods.command import Command
+from brash.command import Command
 
 #: A constant's name: upper case, digits, and underscores, after any leading underscores.
 CONSTANT: Final = re.compile(r"_*[A-Z][A-Z0-9_]*")

@@ -49,8 +49,8 @@ import libcst as cst
 from libcst.codemod.visitors import AddImportsVisitor
 from libcst.metadata import CodeRange, PositionProvider
 
-from canopy_codemods.command import Command
-from canopy_codemods.final_constants import last_name
+from brash.command import Command
+from brash.final_constants import last_name
 
 if TYPE_CHECKING:
     from collections.abc import Collection, Mapping, Sequence

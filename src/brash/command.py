@@ -1,4 +1,4 @@
-"""What every codemod of canopy's is: a `libcst.codemod` command that can say cheaply when a file is not its concern."""
+"""What every codemod is: a `libcst.codemod` command that can say cheaply when a file is not its concern."""
 
 from __future__ import annotations
 

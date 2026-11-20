@@ -3,10 +3,10 @@
 from typing import Final
 
 import pytest
-from canopy_codemods import run
-from canopy_codemods.type_aliases import TypeAliases, aliases
 
-from tests.canopy_codemods.helpers import cases
+from brash import run
+from brash.type_aliases import TypeAliases, aliases
+from tests.helpers import cases
 
 NAME: Final = "type-aliases"
 CASES: Final = cases(NAME)

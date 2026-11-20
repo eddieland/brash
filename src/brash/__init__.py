@@ -1,19 +1,24 @@
-"""canopy-codemods: the mechanical rewrites canopy's own code is held to, applied to files or checked against them.
+"""brash: codemods that hold a Python codebase to its conventions, applied to files or checked against them.
 
-`canopy-codemods PATHS` rewrites the Python under the paths with every codemod in `registry.CODEMODS`, and
-`--check` changes nothing: it prints the diff each would make and fails when there is one, which is how the lint holds
-the repository to them. A codemod is a `libcst.codemod` command, so it keeps every comment and blank line it does not
-touch. The README beside this package says how to add one.
+`brash PATHS` rewrites the Python under the paths with every codemod there is, brash's own in `registry.CODEMODS`
+and those the project registers in its `pyproject.toml`, and `--check` changes nothing: it prints the diff each
+would make and fails when there is one, which is how a lint holds a repository to them. A codemod is a
+`libcst.codemod` command, so it keeps every comment and blank line it does not touch. The README says how to add one.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import click
 
-from canopy_codemods import run
-from canopy_codemods.registry import CODEMODS
+from brash import registry, run
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from brash.command import Command
 
 
 @click.command()
@@ -23,19 +28,20 @@ from canopy_codemods.registry import CODEMODS
     "--only",
     "names",
     multiple=True,
-    type=click.Choice(list(CODEMODS)),
+    metavar="NAME",
     help="Run this codemod alone; give it again for each. By default, all of them.",
 )
 @click.option("--list", "listing", is_flag=True, help="List the codemods and exit.")
 def main(*, paths: tuple[Path, ...], check: bool, names: tuple[str, ...], listing: bool) -> None:
-    """Rewrite the Python under PATHS, files or directories, with canopy's codemods."""
+    """Rewrite the Python under PATHS, files or directories, with every codemod."""
+    codemods = _registered(names)
     if listing:
-        for name, codemod in CODEMODS.items():
+        for name, codemod in codemods.items():
             click.echo(f"{name}  {codemod.DESCRIPTION}")
         return
     if not paths:
         raise click.UsageError("Give the files or directories to rewrite.")
-    rewrites = run.rewrite_all(paths, [name for name in CODEMODS if not names or name in names])
+    rewrites = run.rewrite_all(paths, [name for name in codemods if not names or name in names], codemods)
     failed = [rewrite for rewrite in rewrites if rewrite.error is not None]
     changed = [rewrite for rewrite in rewrites if rewrite.changed]
     for rewrite in failed:
@@ -49,7 +55,27 @@ def main(*, paths: tuple[Path, ...], check: bool, names: tuple[str, ...], listin
     if failed:
         raise click.ClickException(f"{_files(len(failed))} could not be rewritten")
     if check and changed:
-        raise click.ClickException(f"{_files(len(changed))} would be rewritten; run `make fmt`")
+        raise click.ClickException(f"{_files(len(changed))} would be rewritten; run `brash` without `--check`")
+
+
+def _registered(names: Iterable[str]) -> dict[str, type[Command]]:
+    """Every codemod this run has, brash's own and the project's, once `--only` is known to name some of them.
+
+    Returns:
+        Each codemod by name, in the order they run on a file.
+
+    Raises:
+        click.ClickException: When the project registers a codemod that cannot be loaded.
+        click.BadParameter: When `--only` names no codemod.
+    """
+    try:
+        codemods = registry.registered(Path.cwd())
+    except registry.RegistryError as e:
+        raise click.ClickException(str(e)) from e
+    for name in names:
+        if name not in codemods:
+            raise click.BadParameter(f"{name!r} is not one of {', '.join(map(repr, codemods))}.", param_hint="'--only'")
+    return codemods
 
 
 def _files(count: int) -> str:

@@ -5,10 +5,10 @@ from typing import Final
 from unittest import mock
 
 import pytest
-from canopy_codemods import run
-from canopy_codemods.general_params import GeneralParams, widened
 
-from tests.canopy_codemods.helpers import cases
+from brash import run
+from brash.general_params import GeneralParams, widened
+from tests.helpers import cases
 
 NAME: Final = "general-params"
 CASES: Final = cases(NAME)

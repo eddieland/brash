@@ -3,10 +3,10 @@
 from typing import Final
 
 import pytest
-from canopy_codemods import run
-from canopy_codemods.doc_comments import DocComments, comments
 
-from tests.canopy_codemods.helpers import cases
+from brash import run
+from brash.doc_comments import DocComments, comments
+from tests.helpers import cases
 
 NAME: Final = "doc-comments"
 CASES: Final = cases(NAME)
