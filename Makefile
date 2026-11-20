@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help all check fmt lint test
+.PHONY: help all check docs fmt lint test
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-6s\033[0m %s\n", $$1, $$2}' \
@@ -30,3 +30,7 @@ lint: ## Lint and type check: ruff, brash, pyrefly, rumdl, actionlint, zizmor
 
 test: ## Run the tests
 	uv run pytest -q
+
+# What Read the Docs builds, into docs/_build/html. A warning, such as a broken reference, fails it.
+docs: ## Build the documentation
+	uv run --group docs sphinx-build --fail-on-warning --keep-going docs docs/_build/html

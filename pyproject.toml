@@ -77,6 +77,12 @@ dev = [
     # Lints the GitHub workflows for security: every action pinned to a commit, triggers, token handling.
     "zizmor>=1.32.0",
 ]
+# What Read the Docs installs to build docs/, and `make docs` with it: Sphinx, Markdown pages, and the theme.
+docs = [
+    "furo",
+    "myst-parser",
+    "sphinx",
+]
 
 [tool.ruff]
 line-length = 120
@@ -150,6 +156,8 @@ banned-from = ["unittest.mock"]
 ]
 # The command's docstring is its --help text, so a Raises section would print there.
 "src/brash/__init__.py" = ["DOC501"]
+# Sphinx reads its configuration as a script, from a directory that is no package.
+"docs/conf.py" = ["INP001"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -175,3 +183,5 @@ code-blocks = false
 [tool.rumdl.per-file-ignores]
 # An include of AGENTS.md, not a document.
 "CLAUDE.md" = ["MD041"]
+# An include of README.md, whose heading is the page's.
+"docs/index.md" = ["MD041"]

@@ -1,6 +1,6 @@
 # brash
 
-<img width="1774" height="887" alt="3FC23AEF-0B97-4152-AE50-FF3F8D7CF196" src="https://github.com/user-attachments/assets/bf0d5df8-235d-4962-8e27-c2b6a32ae684" />
+![brash](https://github.com/user-attachments/assets/bf0d5df8-235d-4962-8e27-c2b6a32ae684)
 
 Codemods that hold a Python codebase to its conventions. A linter can only report that a module constant is not
 `Final` or that a parameter is typed `list` where `Iterable` would do; brash rewrites the file. It is built on
@@ -283,9 +283,12 @@ uv sync      # install brash and its dev tools
 make fmt     # brash on its own code, then ruff and rumdl
 make lint    # every formatter's check, ruff, brash --check, pyrefly, rumdl, actionlint, zizmor
 make test    # pytest
+make docs    # the documentation, into docs/_build/html
 ```
 
-[AGENTS.md](https://github.com/eddieland/brash/blob/main/AGENTS.md) holds the conventions. A release is a `v*` tag:
+[AGENTS.md](https://github.com/eddieland/brash/blob/main/AGENTS.md) holds the conventions.
+[Read the Docs](https://brash.readthedocs.io) builds `docs/` on every push: this README, and the API a project's
+codemod is written against. A release is a `v*` tag:
 the Publish workflow builds it, with the tag as its version, and publishes it to PyPI. The Tag workflow, run by hand,
 creates the tag on the head of `main` or a branch it is given: the next major, minor or patch version, or an exact
 tag.

@@ -42,6 +42,10 @@ jobs:
       - name: Lint
         run: make lint
 
+      # What Read the Docs builds, where a warning is an error.
+      - name: Build the documentation
+        run: make docs
+
       # Both hooks of .pre-commit-hooks.yaml, as prek installs them from this commit, over brash's own code.
       - name: Run the git hooks
         run: uv run prek try-repo . --all-files
