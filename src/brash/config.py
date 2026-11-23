@@ -1,6 +1,7 @@
 """What a project sets for brash, in the `[tool.brash]` table of its `pyproject.toml` or in a `brash.toml`.
 
     [tool.brash]
+    target-version = "py310"
     ignore = ["general-params"]
     exclude = ["src/app/_generated", "*_pb2.py"]
 
@@ -9,6 +10,7 @@
 
 A `brash.toml` holds the same settings at its top level, with no `[tool.brash]` above them:
 
+    target-version = "py310"
     ignore = ["general-params"]
     exclude = ["src/app/_generated", "*_pb2.py"]
 
@@ -38,12 +40,21 @@ SHARED: Final = "pyproject.toml"
 #: Both, in the order brash looks for them in a directory.
 CONFIGS: Final = (DEDICATED, SHARED)
 _ENTRY: Final = re.compile(r"[^\W\d]\w*(\.[^\W\d]\w*)*:[^\W\d]\w*")
+_TARGET: Final = re.compile(r"py3(\d{1,2})")
 
 
 def _module_and_class(entry: str) -> str:
     if not _ENTRY.fullmatch(entry):
         raise PydanticCustomError("codemod_entry", "`{entry}` is not a `module:Class`", {"entry": entry})
     return entry
+
+
+def _target(target: str) -> str:
+    try:
+        python(target)
+    except ValueError as e:
+        raise PydanticCustomError("target_version", "{problem}", {"problem": str(e)}) from e
+    return target
 
 
 class Config(BaseModel):
@@ -63,6 +74,12 @@ class Config(BaseModel):
     """
     ignore: tuple[str, ...] = ()
     """The codemods that do not run, by name: a blocklist, taken from `select` or from every codemod."""
+    target_version: Annotated[str, AfterValidator(_target)] | None = Field(default=None, alias="target-version")
+    """The oldest Python the project's code runs on, as `py310` for 3.10. Every codemod runs, when it is not set.
+
+    A codemod whose `MINIMUM_PYTHON` is later does not run, and `--target-version` on the command line is taken in
+    place of it.
+    """
     exclude: tuple[str, ...] = ()
     """Files and directories no codemod rewrites, as glob patterns of paths relative to the project's directory.
 
@@ -132,12 +149,27 @@ def load(start: Path) -> Project:
     except (OSError, tomllib.TOMLDecodeError) as e:
         raise ConfigError(f"{path}: {e}") from e
     try:
-        return Project(path.parent, Config.model_validate(_settings(document, path.name)), path.name)
+        return Project(path.parent, Config.model_validate(_table(document, path.name)), path.name)
     except ValidationError as e:
         raise ConfigError("\n".join(f"{path}: {_problem(error, path.name)}" for error in e.errors())) from e
 
 
-def _settings(document: Mapping[str, object], file: str) -> object:
+def python(target: str) -> tuple[int, int]:
+    """The Python version a target names: `py310` is 3.10.
+
+    Returns:
+        The major and minor version.
+
+    Raises:
+        ValueError: When the text names no version of Python 3.
+    """
+    match = _TARGET.fullmatch(target)
+    if match is None:
+        raise ValueError(f"`{target}` is not a Python version such as `py310`")
+    return 3, int(match[1])
+
+
+def _table(document: Mapping[str, object], file: str) -> object:
     """What the file of that name sets for brash: all a `brash.toml` holds, or a `pyproject.toml`'s `[tool.brash]`.
 
     Returns:
@@ -158,9 +190,13 @@ def _problem(error: ErrorDetails, file: str) -> str:
     """
     key = _key(file, error["loc"])
     if error["type"] == "extra_forbidden":
-        return f"{key}: no such setting; there are {', '.join(f'`{name}`' for name in Config.model_fields)}"
+        return f"{key}: no such setting; there are {', '.join(f'`{name}`' for name in _settings())}"
     return f"{key}: {error['msg']}"
 
 
 def _key(file: str, keys: Iterable[object]) -> str:
     return ".".join((*(() if file == DEDICATED else ("tool", "brash")), *map(str, keys)))
+
+
+def _settings() -> list[str]:
+    return [field.alias or name for name, field in Config.model_fields.items()]

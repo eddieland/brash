@@ -52,6 +52,7 @@ class TypeAliases(Command):
     """Rewrite every implicit type alias as a `type` statement."""
 
     DESCRIPTION = "Rewrite an implicit type alias (`Name = Literal[...]`) as a `type` statement."
+    MINIMUM_PYTHON = (3, 12)
 
     @classmethod
     @override

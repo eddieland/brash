@@ -4,7 +4,8 @@
 those the project registers in its `pyproject.toml` or `brash.toml`, but for any it turns off there, leaving alone the
 files its `exclude` there names, and `--check` changes nothing: it prints the diff each would make and fails when there
 is one, which is how a lint holds a repository to them. A codemod is a `libcst.codemod` command, so it keeps every
-comment and blank line it does not touch. The README says how to add one.
+comment and blank line it does not touch. A project that runs on a Python older than a codemod's output needs says so
+with `target-version` there, or `--target-version` here, and that codemod does not run. The README says how to add one.
 """
 
 from __future__ import annotations
@@ -23,6 +24,23 @@ if TYPE_CHECKING:
     from brash.config import Project
 
 
+def _target(_context: click.Context, _parameter: click.Parameter, target: str | None) -> str | None:
+    """Check what `--target-version` was given.
+
+    Returns:
+        The target as it was given, or None when it was not.
+
+    Raises:
+        click.BadParameter: When it names no Python version.
+    """
+    if target is not None:
+        try:
+            config.python(target)
+        except ValueError as e:
+            raise click.BadParameter(f"{e}.") from e
+    return target
+
+
 @click.command()
 @click.argument("paths", nargs=-1, type=click.Path(exists=True, path_type=Path))
 @click.option("--check", is_flag=True, help="Change nothing: print the diff, and fail when there is one.")
@@ -33,10 +51,25 @@ if TYPE_CHECKING:
     metavar="NAME",
     help="Run this codemod alone; give it again for each. By default, all the project has not turned off.",
 )
+@click.option(
+    "--target-version",
+    "target",
+    metavar="PY",
+    callback=_target,
+    help="The oldest Python the code runs on, as py310: a codemod whose output needs a later one does not run. "
+    "By default, the project's `target-version`.",
+)
 @click.option("--list", "listing", is_flag=True, help="List the codemods and exit.")
-def main(*, paths: tuple[Path, ...], check: bool, names: tuple[str, ...], listing: bool) -> None:
+def main(
+    *,
+    paths: tuple[Path, ...],
+    check: bool,
+    names: tuple[str, ...],
+    target: str | None,
+    listing: bool,
+) -> None:
     """Rewrite the Python under PATHS, files or directories, with every codemod."""
-    project, codemods, chosen = _registered(names)
+    project, codemods, chosen = _registered(names, target)
     if listing:
         for name, codemod in codemods.items():
             click.echo(f"{name}  {codemod.DESCRIPTION}")
@@ -61,8 +94,11 @@ def main(*, paths: tuple[Path, ...], check: bool, names: tuple[str, ...], listin
         raise click.ClickException(f"{_files(len(changed))} would be rewritten; run `brash` without `--check`")
 
 
-def _registered(names: Collection[str]) -> tuple[Project, dict[str, type[Command]], list[str]]:
+def _registered(names: Collection[str], target: str | None) -> tuple[Project, dict[str, type[Command]], list[str]]:
     """The project this run is in, every codemod it has, and those it runs: `--only`'s, or the project's choice.
+
+    Either way, a codemod whose output needs a later Python than the target does not run: `--target-version`'s, or
+    the project's `target-version`.
 
     Returns:
         The project; each codemod by name, brash's own and then the project's, in the order they run on a file; and
@@ -82,7 +118,13 @@ def _registered(names: Collection[str]) -> tuple[Project, dict[str, type[Command
     for name in names:
         if name not in codemods:
             raise click.BadParameter(f"{name!r} is not one of {', '.join(map(repr, codemods))}.", param_hint="'--only'")
-    return project, codemods, [name for name in codemods if name in names] if names else chosen
+    if names:
+        chosen = [name for name in codemods if name in names]
+    target = target or project.config.target_version
+    if target is not None:
+        oldest = config.python(target)
+        chosen = [name for name in chosen if oldest >= codemods[name].MINIMUM_PYTHON]
+    return project, codemods, chosen
 
 
 def _files(count: int) -> str:
