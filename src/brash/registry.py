@@ -1,13 +1,13 @@
 """The codemods, by the name the command line takes: brash's own, and those a project registers for itself.
 
-A project registers a codemod of its own in its `pyproject.toml`, under the name its command line takes, as the
-module that holds it and the class's name there:
+A project registers a codemod of its own in its `pyproject.toml`, or in the `[codemods]` of its `brash.toml`, under
+the name its command line takes, as the module that holds it and the class's name there:
 
     [tool.brash.codemods]
     vocab-members = "codemods.vocab_members:VocabMembers"
 
-The module is imported as any other is, from the environment brash runs in or from the directory that holds the
-`pyproject.toml`, so a project's codemod need not be installed. The class is a `command.Command`. A project's codemods
+The module is imported as any other is, from the environment brash runs in or from the directory that holds that
+file, so a project's codemod need not be installed. The class is a `command.Command`. A project's codemods
 run after brash's own, in the order the table gives them. `config` reads the table, and its `select` and `ignore` there
 say which of them all a run leaves out.
 """
@@ -19,7 +19,6 @@ import sys
 from typing import TYPE_CHECKING, Final
 
 from brash.command import Command
-from brash.config import CONFIG
 from brash.doc_comments import DocComments
 from brash.final_constants import FinalConstants
 from brash.general_params import GeneralParams
@@ -40,11 +39,11 @@ CODEMODS: Final[Mapping[str, type[Command]]] = {
 
 
 class RegistryError(Exception):
-    """A project's `pyproject.toml` registers a codemod that cannot be loaded."""
+    """A project registers a codemod that cannot be loaded, or chooses one there is not."""
 
 
 def registered(project: Project) -> dict[str, type[Command]]:
-    """Every codemod a run in a project has: brash's own, then those its `[tool.brash.codemods]` registers.
+    """Every codemod a run in a project has: brash's own, then those its `codemods` registers.
 
     The project's directory is put on the import path, last, so a codemod's module there is found without being
     installed.
@@ -62,7 +61,7 @@ def registered(project: Project) -> dict[str, type[Command]]:
     if table and str(project.root) not in sys.path:
         sys.path.append(str(project.root))
     for name, where in table.items():
-        entry = f"{project.root / CONFIG}: tool.brash.codemods.{name}"
+        entry = project.setting("codemods", name)
         if name in CODEMODS:
             raise RegistryError(f"{entry}: the name is one of brash's own")
         codemods[name] = _load(where, entry)
@@ -73,7 +72,7 @@ def selected(project: Project, codemods: Collection[str]) -> list[str]:
     """The codemods a run in a project runs by default: those its `select` names, or all, but for its `ignore`.
 
     Args:
-        project: The project, whose `[tool.brash]` may hold either list.
+        project: The project, whose configuration may hold either list.
         codemods: Every codemod the run has by name, in the order they run on a file.
 
     Returns:
@@ -87,8 +86,8 @@ def selected(project: Project, codemods: Collection[str]) -> list[str]:
         for name in names:
             if name not in codemods:
                 there = ", ".join(f"`{known}`" for known in codemods)
-                where = f"{project.root / CONFIG}" if project.root else CONFIG
-                raise RegistryError(f"{where}: tool.brash.{setting}: `{name}` is not a codemod; there are {there}")
+                where = project.setting(setting)
+                raise RegistryError(f"{where}: `{name}` is not a codemod; there are {there}")
     return [name for name in codemods if (select is None or name in select) and name not in ignore]
 
 

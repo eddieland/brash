@@ -105,8 +105,23 @@ no-print = "codemods.no_print:NoPrint"
   file is left alone when it is named outright too, as a git hook names it.
 - **`codemods`** registers [your project's own codemods](#your-projects-own-codemods).
 
-brash reads the nearest `pyproject.toml`, in the directory it runs from or one above it. A setting it does not have,
-or a value of the wrong type, fails the run with exit code 1 and a line for each, naming the file and the key:
+A project that keeps each tool's settings in a file of its own has a `brash.toml` instead, with the same settings at
+its top level, and no `[tool.brash]` above them:
+
+```toml
+target-version = "py310"
+ignore = ["general-params"]
+exclude = ["src/app/_generated", "*_pb2.py"]
+
+[codemods]
+no-print = "codemods.no_print:NoPrint"
+```
+
+brash reads the nearest `brash.toml` or `pyproject.toml`, in the directory it runs from or one above it, and the
+`brash.toml` where a directory holds both: the `[tool.brash]` beside it is not read. What is said here of the
+`pyproject.toml`, such as what `exclude`'s patterns are relative to, is as true of a `brash.toml`. A setting it does
+not have, or a value of the wrong type, fails the run with exit code 1 and a line for each, naming the file and the
+key:
 
 ```text
 Error: /repo/pyproject.toml: tool.brash.excludes: no such setting; there are `codemods`, `select`, `ignore`, `target-version`, `exclude`
@@ -206,8 +221,9 @@ and reports nothing. The cases each one is held to are Python snippets, before a
 ## Your project's own codemods
 
 A convention that only your project has, such as naming an enum's member where its code compares a bare string, is a
-codemod of your own that brash runs with its own. Register it in the project's `pyproject.toml`, under the name the
-command line takes, as the module that holds it and the class's name there:
+codemod of your own that brash runs with its own. Register it in the project's `pyproject.toml`, or in the
+`[codemods]` of its `brash.toml`, under the name the command line takes, as the module that holds it and the
+class's name there:
 
 ```toml
 [tool.brash.codemods]

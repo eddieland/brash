@@ -1,11 +1,11 @@
 """brash: codemods that hold a Python codebase to its conventions, applied to files or checked against them.
 
 `brash PATHS` rewrites the Python under the paths with every codemod there is, brash's own in `registry.CODEMODS` and
-those the project registers in its `pyproject.toml`, but for any it turns off there, leaving alone the files its
-`exclude` there names, and `--check` changes nothing: it prints the diff each would make and fails when there is one,
-which is how a lint holds a repository to them. A codemod is a `libcst.codemod` command, so it keeps every comment and
-blank line it does not touch. A project that runs on a Python older than a codemod's output needs says so with
-`target-version` there, or `--target-version` here, and that codemod does not run. The README says how to add one.
+those the project registers in its `pyproject.toml` or `brash.toml`, but for any it turns off there, leaving alone the
+files its `exclude` there names, and `--check` changes nothing: it prints the diff each would make and fails when there
+is one, which is how a lint holds a repository to them. A codemod is a `libcst.codemod` command, so it keeps every
+comment and blank line it does not touch. A project that runs on a Python older than a codemod's output needs says so
+with `target-version` there, or `--target-version` here, and that codemod does not run. The README says how to add one.
 """
 
 from __future__ import annotations
@@ -105,7 +105,7 @@ def _registered(names: Collection[str], target: str | None) -> tuple[Project, di
         the names of those to run, in that order.
 
     Raises:
-        click.ClickException: When the project's `[tool.brash]` is not one brash takes, registers a codemod that
+        click.ClickException: When the project's configuration is not one brash takes, registers a codemod that
             cannot be loaded, or selects or ignores one there is not.
         click.BadParameter: When `--only` names no codemod.
     """
