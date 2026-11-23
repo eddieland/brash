@@ -71,12 +71,16 @@ lint:
 Every codemod runs by default. A project turns one off, or names the few it wants, with `ignore` and `select` in
 its [configuration](#configuration); `--only` names the ones for a single run, and is taken in place of both.
 
+A project whose code runs on a Python older than 3.12 sets its `target-version`, and a codemod that writes syntax
+that Python does not have, which is `type-aliases`, does not run; `--target-version py310` says it for a single run.
+
 ## Configuration
 
 A project configures brash in its `pyproject.toml`, under `[tool.brash]`. Every setting is optional:
 
 ```toml
 [tool.brash]
+target-version = "py310"
 ignore = ["general-params"]
 exclude = ["src/app/_generated", "*_pb2.py"]
 
@@ -90,6 +94,10 @@ no-print = "codemods.no_print:NoPrint"
   `ignore` does not name. Either takes your project's own codemods as it takes brash's, and a name no codemod has
   fails the run. The order codemods run in is brash's, whatever the list's. `--only` on the command line is taken in
   place of both, so it runs an ignored codemod, and `--list` lists every codemod, on or off.
+- **`target-version`** is the oldest Python the project's code runs on, as ruff spells it: `py310` for 3.10. A
+  codemod whose output needs a later Python does not run, named by `--only` or not. Left out, every codemod runs,
+  whatever the project's `requires-python`: brash does not read it. `--target-version` on the command line is taken
+  in place of it.
 - **`exclude`** lists the files and directories no codemod rewrites, such as generated code, as glob patterns of
   paths relative to the directory that holds the `pyproject.toml`. A pattern excludes the file or directory it
   matches, and everything under that directory. Its `*` matches any run of characters, slashes among them, so
@@ -101,7 +109,7 @@ brash reads the nearest `pyproject.toml`, in the directory it runs from or one a
 or a value of the wrong type, fails the run with exit code 1 and a line for each, naming the file and the key:
 
 ```text
-Error: /repo/pyproject.toml: tool.brash.excludes: no such setting; there are `codemods`, `select`, `ignore`, `exclude`
+Error: /repo/pyproject.toml: tool.brash.excludes: no such setting; there are `codemods`, `select`, `ignore`, `target-version`, `exclude`
 ```
 
 ## As a git hook
@@ -167,7 +175,8 @@ The hook runs in an environment of its own, which holds brash and nothing of you
   module reads outside an annotation (passed to `get_args` or `isinstance`, called, subclassed, held in another
   assignment); an `Annotated[...]` alias, whose metadata frameworks read as the program runs; and a union that may be
   of values, with no `None`, subscript, or builtin type in it. It sees one module at a time: where another module
-  reads a rewritten alias at run time, that reader takes its `__value__`.
+  reads a rewritten alias at run time, that reader takes its `__value__`. The `type` statement is Python 3.12's, so
+  it does not run in a project whose [`target-version`](#configuration) is older.
 - **`doc-comments`** writes the comment directly above a name as a Sphinx doc comment, which editors and doc tools
   attach to the name: `# How often a run is resumed.` above `MAX_RESUMES: Final = 3` becomes
   `#: How often a run is resumed.`. The names are a module's constants and type aliases, among its own statements, and
@@ -245,6 +254,9 @@ Two rules keep the check honest and quick, for your codemods as for brash's:
   alone, before anything is parsed: `final-constants` decides from the stdlib's `ast`, so a file with no constant
   left to annotate is never parsed by LibCST. A codemod without a `wants` parses every file on every lint. A codemod
   held to some files alone says which in `Command.covers(filename)`, asked before the text is read.
+
+A codemod that writes syntax an older Python does not have names the first that has it, as `MINIMUM_PYTHON = (3, 12)`
+on the class, and does not run in a project whose `target-version` is older.
 
 To test one, run a module's text through it: `brash.run.rewrite(source, ["no-print"], codemods={"no-print": NoPrint})`
 gives the text back rewritten.
