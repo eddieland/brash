@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 from libcst.codemod import VisitorBasedCodemodCommand
 
 
@@ -12,6 +14,10 @@ class Command(VisitorBasedCodemodCommand):
     every codemod over every file. So a codemod that can tell from a module's text that it has nothing to do there
     says so in `wants`, and the file is never parsed.
     """
+
+    #: The oldest Python that runs what the codemod writes, as its major and minor version. A project whose
+    #: `target-version` is older does not run the codemod.
+    MINIMUM_PYTHON: ClassVar[tuple[int, int]] = (3, 0)
 
     @classmethod
     def covers(cls, filename: str | None) -> bool:  # noqa: ARG003

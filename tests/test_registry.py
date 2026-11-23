@@ -173,7 +173,8 @@ def test_an_entry_that_names_no_codemod_fails_the_run_and_says_which(project: Pa
         pytest.param("[tool]\nbrash = 3\n", "tool.brash: Input should be a valid dictionary", id="no table"),
         pytest.param(
             "[tool.brash]\ncodemod = {}\n",
-            "tool.brash.codemod: no such setting; there are `codemods`, `select`, `ignore`, `exclude`",
+            "tool.brash.codemod: no such setting; there are `codemods`, `select`, `ignore`, `target-version`, "
+            "`exclude`",
             id="another key",
         ),
         pytest.param(
@@ -190,6 +191,16 @@ def test_an_entry_that_names_no_codemod_fails_the_run_and_says_which(project: Pa
             "[tool.brash.codemods]\nrename = 3\n",
             "tool.brash.codemods.rename: Input should be a valid string",
             id="not a string",
+        ),
+        pytest.param(
+            "[tool.brash]\ntarget-version = '3.10'\n",
+            "tool.brash.target-version: `3.10` is not a Python version such as `py310`",
+            id="a version, not a target",
+        ),
+        pytest.param(
+            "[tool.brash]\ntarget_version = 'py310'\n",
+            "tool.brash.target_version: no such setting; there are ",
+            id="the target, spelled as Python spells it",
         ),
         pytest.param(
             "[tool.brash]\nexclude = 'build'\n",
@@ -227,7 +238,7 @@ def test_everything_wrong_with_a_table_is_reported_at_once_each_with_the_file(pr
     assert sorted(line.removeprefix(f"{project / 'pyproject.toml'}: ") for line in str(raised.value).splitlines()) == [
         "tool.brash.codemods.rename: `nope` is not a `module:Class`",
         "tool.brash.exclude: Input should be a valid tuple",
-        "tool.brash.excludes: no such setting; there are `codemods`, `select`, `ignore`, `exclude`",
+        "tool.brash.excludes: no such setting; there are `codemods`, `select`, `ignore`, `target-version`, `exclude`",
     ]
 
 
@@ -329,3 +340,54 @@ def test_a_choice_of_a_codemod_there_is_not_fails_the_run_and_names_those_there_
     assert f"pyproject.toml: tool.brash.{setting}: `final-constant` is not a codemod; there are " in output
     assert "`general-params`, `rename`" in output
     assert stale.read_text() == BEFORE
+
+
+#: A module `type-aliases` rewrites, with a constant for `final-constants`.
+ALIASED: Final = 'from typing import Literal\n\nOutcome = Literal["packed", "failed"]\n'
+
+
+def test_a_target_older_than_a_codemods_output_needs_turns_it_off_and_the_others_run(project: Path) -> None:
+    stale = project / "stale.py"
+    stale.write_text(ALIASED + BEFORE)
+
+    assert "+type Outcome" in invoke("--check", stale)[1]
+    configure(project, CONFIGURED + "target-version = 'py311'\n")
+    code, _ = invoke(stale)
+
+    assert code == 0
+    assert (
+        stale.read_text()
+        == 'from typing import Final, Literal\n\nOutcome = Literal["packed", "failed"]\nNEW: Final = 3\n'
+    )
+
+
+def test_a_target_that_has_a_codemods_syntax_leaves_it_on(project: Path) -> None:
+    stale = project / "stale.py"
+    stale.write_text(ALIASED)
+    configure(project, CONFIGURED + "target-version = 'py312'\n")
+
+    assert "+type Outcome" in invoke("--check", stale)[1]
+
+
+def test_the_target_holds_for_a_codemod_only_names(project: Path) -> None:
+    stale = project / "stale.py"
+    stale.write_text(ALIASED)
+    configure(project, CONFIGURED + "target-version = 'py310'\n")
+
+    assert invoke("--check", "--only", "type-aliases", stale) == (0, "")
+
+
+def test_the_command_lines_target_is_taken_in_place_of_the_projects(project: Path) -> None:
+    stale = project / "stale.py"
+    stale.write_text(ALIASED)
+
+    assert invoke("--check", "--target-version", "py310", stale) == (0, "")
+    configure(project, CONFIGURED + "target-version = 'py310'\n")
+    assert "+type Outcome" in invoke("--check", "--target-version", "py313", stale)[1]
+
+
+def test_a_target_on_the_command_line_that_names_no_python_is_refused(project: Path) -> None:
+    code, output = invoke("--target-version", "3.10", project)
+
+    assert code == 2
+    assert "`3.10` is not a Python version such as `py310`." in output
