@@ -1,4 +1,7 @@
-"""What a project sets in its `pyproject.toml`: its codemods found, listed, run and refused, and its files excluded."""
+"""What a project sets in its `pyproject.toml` or `brash.toml`.
+
+Its codemods found, listed, run and refused, and its files excluded.
+"""
 
 import contextlib
 import sys
@@ -62,7 +65,7 @@ def configure(project: Path, text: str) -> None:
 
 
 def test_a_directory_with_no_project_above_it_has_brashs_own_codemods(tmp_path: Path) -> None:
-    with mock.patch.object(config, "CONFIG", "no-such-file.toml"):
+    with mock.patch.object(config, "CONFIGS", ("no-such-file.toml",)):
         assert registry.registered(config.load(tmp_path)) == dict(CODEMODS)
 
 
@@ -229,6 +232,80 @@ def test_everything_wrong_with_a_table_is_reported_at_once_each_with_the_file(pr
         "tool.brash.exclude: Input should be a valid tuple",
         "tool.brash.excludes: no such setting; there are `codemods`, `select`, `ignore`, `exclude`",
     ]
+
+
+def test_a_brash_toml_holds_the_settings_at_its_top_level(project: Path) -> None:
+    (project / "pyproject.toml").unlink()
+    (project / "brash.toml").write_text(
+        "exclude = ['skipped.py']\n[codemods]\nrename = 'local_codemods.rename:Rename'\n",
+    )
+    stale, skipped = project / "stale.py", project / "skipped.py"
+    stale.write_text(BEFORE)
+    skipped.write_text(BEFORE)
+
+    code, _ = invoke(".")
+
+    assert code == 0
+    assert stale.read_text() == AFTER
+    assert skipped.read_text() == BEFORE
+
+
+def test_a_brash_toml_is_read_in_place_of_the_pyproject_beside_it_and_of_any_above(project: Path) -> None:
+    configure(project, CONFIGURED + "ignore = ['final-constants']\n")
+    (project / "brash.toml").write_text("ignore = ['doc-comments']\n")
+    below = project / "below"
+    below.mkdir()
+    (below / "brash.toml").write_text("")
+
+    assert config.load(project).config.ignore == ("doc-comments",)
+    assert list(registry.registered(config.load(project))) == list(CODEMODS)
+    assert config.load(below).config == config.Config()
+    assert config.load(below).root == below
+
+
+def test_a_pyproject_below_a_brash_toml_is_the_one_read(project: Path) -> None:
+    (project / "brash.toml").write_text("ignore = ['doc-comments']\n")
+    below = project / "below"
+    below.mkdir()
+    (below / "pyproject.toml").write_text("[tool.brash]\nignore = ['type-aliases']\n")
+
+    assert config.load(below).config.ignore == ("type-aliases",)
+
+
+def test_what_is_wrong_in_a_brash_toml_is_at_its_key_there_with_no_table_above_it(project: Path) -> None:
+    (project / "brash.toml").write_text("excludes = []\n[codemods]\nrename = 'nope'\n")
+
+    with pytest.raises(ConfigError) as raised:
+        config.load(project)
+
+    assert sorted(line.removeprefix(f"{project / 'brash.toml'}: ") for line in str(raised.value).splitlines()) == [
+        "codemods.rename: `nope` is not a `module:Class`",
+        "excludes: no such setting; there are `codemods`, `select`, `ignore`, `exclude`",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        pytest.param("select = ['final-constant']\n", "select: `final-constant` is not a codemod", id="a choice"),
+        pytest.param(
+            "[codemods]\ndoc-comments = 'local_codemods.rename:Rename'\n",
+            "codemods.doc-comments: the name is one of brash's own",
+            id="a codemod",
+        ),
+    ],
+)
+def test_a_codemod_a_brash_toml_cannot_have_fails_the_run_at_its_key_there(
+    project: Path,
+    text: str,
+    message: str,
+) -> None:
+    (project / "brash.toml").write_text(text)
+
+    code, output = invoke(".")
+
+    assert code == 1
+    assert f"Error: {project / 'brash.toml'}: {message}" in output
 
 
 def test_excluded_files_are_left_alone_found_or_named_outright_and_others_are_rewritten(project: Path) -> None:

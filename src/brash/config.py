@@ -1,4 +1,4 @@
-"""What a project sets for brash, in the `[tool.brash]` table of its `pyproject.toml`.
+"""What a project sets for brash, in the `[tool.brash]` table of its `pyproject.toml` or in a `brash.toml`.
 
     [tool.brash]
     ignore = ["general-params"]
@@ -7,13 +7,22 @@
     [tool.brash.codemods]
     vocab-members = "codemods.vocab_members:VocabMembers"
 
-The project is the nearest directory, the one brash runs from or one above it, that holds a `pyproject.toml`. The
-table is a `Config`: a setting it does not have, or a value of the wrong type, fails the run with the key it is at.
+A `brash.toml` holds the same settings at its top level, with no `[tool.brash]` above them:
+
+    ignore = ["general-params"]
+    exclude = ["src/app/_generated", "*_pb2.py"]
+
+    [codemods]
+    vocab-members = "codemods.vocab_members:VocabMembers"
+
+The project is the nearest directory, the one brash runs from or one above it, that holds either file, and the
+`brash.toml` is the one read where it holds both. The settings are a `Config`: one it does not have, or a value of
+the wrong type, fails the run with the key it is at.
 """
 
 import re
 import tomllib
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from fnmatch import fnmatchcase
 from pathlib import Path
@@ -22,8 +31,12 @@ from typing import Annotated, Final
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, ValidationError
 from pydantic_core import ErrorDetails, PydanticCustomError
 
-#: The file a project configures brash in.
-CONFIG: Final = "pyproject.toml"
+#: The file a project configures brash in by itself, with the settings at its top level.
+DEDICATED: Final = "brash.toml"
+#: The file a project configures brash in beside its other tools, under `[tool.brash]`.
+SHARED: Final = "pyproject.toml"
+#: Both, in the order brash looks for them in a directory.
+CONFIGS: Final = (DEDICATED, SHARED)
 _ENTRY: Final = re.compile(r"[^\W\d]\w*(\.[^\W\d]\w*)*:[^\W\d]\w*")
 
 
@@ -34,7 +47,7 @@ def _module_and_class(entry: str) -> str:
 
 
 class Config(BaseModel):
-    """The `[tool.brash]` table: every setting a project has, each optional."""
+    """The `[tool.brash]` table, or a `brash.toml`: every setting a project has, each optional."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, use_attribute_docstrings=True)
 
@@ -62,9 +75,19 @@ class Config(BaseModel):
 class Project:
     """A project's configuration, and where it was read."""
 
-    #: The directory that holds the `pyproject.toml`, resolved, or None when the run is in no project.
+    #: The directory that holds the file it was read from, resolved, or None when the run is in no project.
     root: Path | None
     config: Config
+    #: The name of that file: one of `CONFIGS`.
+    file: str = SHARED
+
+    def setting(self, *keys: object) -> str:
+        """Where a setting is, for a message about it.
+
+        Returns:
+            The file's path, then the key the setting is at in it: under `tool.brash` in a `pyproject.toml`.
+        """
+        return f"{self.root / self.file if self.root else self.file}: {_key(self.file, keys)}"
 
     def excludes(self, path: Path) -> bool:
         """Whether the project's `exclude` keeps the codemods off the file at `path`.
@@ -84,41 +107,60 @@ class Project:
 
 
 class ConfigError(Exception):
-    """A project's `pyproject.toml` does not parse, or its `[tool.brash]` is not a `Config`."""
+    """A project's `brash.toml` or `pyproject.toml` does not parse, or its settings are not a `Config`."""
 
 
 def load(start: Path) -> Project:
     """Read the configuration of the project a run from the directory `start` is in.
 
     Returns:
-        The project, with every setting at its default when no `pyproject.toml` is found or it has no `[tool.brash]`.
+        The project, with every setting at its default when neither file is found, or the one found is a
+        `pyproject.toml` with no `[tool.brash]`.
 
     Raises:
-        ConfigError: When the file does not parse, or the table holds a setting or a value brash does not take. The
-            message has a line for each, with the file and the key.
+        ConfigError: When the file does not parse, or holds a setting or a value brash does not take. The message
+            has a line for each, with the file and the key.
     """
     start = start.resolve()
-    path = next((d / CONFIG for d in (start, *start.parents) if (d / CONFIG).is_file()), None)
+    candidates = (d / name for d in (start, *start.parents) for name in CONFIGS)
+    path = next((candidate for candidate in candidates if candidate.is_file()), None)
     if path is None:
         return Project(None, Config())
     try:
         with path.open("rb") as stream:
-            tool: object = tomllib.load(stream).get("tool")
+            document = tomllib.load(stream)
     except (OSError, tomllib.TOMLDecodeError) as e:
         raise ConfigError(f"{path}: {e}") from e
     try:
-        return Project(path.parent, Config.model_validate(tool.get("brash", {}) if isinstance(tool, dict) else {}))
+        return Project(path.parent, Config.model_validate(_settings(document, path.name)), path.name)
     except ValidationError as e:
-        raise ConfigError("\n".join(f"{path}: {_problem(error)}" for error in e.errors())) from e
+        raise ConfigError("\n".join(f"{path}: {_problem(error, path.name)}" for error in e.errors())) from e
 
 
-def _problem(error: ErrorDetails) -> str:
-    """One thing wrong with the table, as the key it is at and what is wrong there.
+def _settings(document: Mapping[str, object], file: str) -> object:
+    """What the file of that name sets for brash: all a `brash.toml` holds, or a `pyproject.toml`'s `[tool.brash]`.
+
+    Returns:
+        The settings, not yet validated: none when a `pyproject.toml` has no such table.
+    """
+    if file == DEDICATED:
+        return document
+    tool = document.get("tool")
+    empty: dict[str, object] = {}
+    return tool.get("brash", empty) if isinstance(tool, dict) else empty
+
+
+def _problem(error: ErrorDetails, file: str) -> str:
+    """One thing wrong with the settings, as the key it is at in the file of that name and what is wrong there.
 
     Returns:
         The line, without the file's name.
     """
-    key = ".".join(("tool", "brash", *map(str, error["loc"])))
+    key = _key(file, error["loc"])
     if error["type"] == "extra_forbidden":
         return f"{key}: no such setting; there are {', '.join(f'`{name}`' for name in Config.model_fields)}"
     return f"{key}: {error['msg']}"
+
+
+def _key(file: str, keys: Iterable[object]) -> str:
+    return ".".join((*(() if file == DEDICATED else ("tool", "brash")), *map(str, keys)))
