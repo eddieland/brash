@@ -937,11 +937,11 @@ pinned it, "Another subscript", now holds a subscript of something else, `Table[
 321 in 169 after, so 75 new sites in 51 files, 11 of them in tests; no site is lost. 21 are under typing's `Tuple`,
 `Dict`, `List` and `Set`, which `HEADS` did not have, and 7 are a `Union`, an `Optional` or a `Literal` that stayed
 before only because an alias left alone read it. Every rewritten file parses, and a second run changes nothing, also
-after ruff 0.17.6's fixes of UP006, UP007, UP035 and UP045, its import fix and its format. All 75 were read as a list of the
-assignments, and each is a type. The type checkers were not run. One site shows a limit the codemod had already: a
-name read only inside a quoted annotation of an alias that stays an assignment (`IntList = list[int]` beside
-`OuterDict = dict[str, 'IntList']`, in pydantic's tests) is rewritten, since a quoted name is not counted as a read.
-It does not fire on brash's own code.
+after ruff 0.17.6's fixes of UP006, UP007, UP035 and UP045, its import fix and its format. All 75 were read as a list
+of the assignments, and each is a type. The type checkers were not run. One site shows a limit the codemod had
+already: a name read only inside a quoted annotation of an alias that stays an assignment (`IntList = list[int]`
+beside `OuterDict = dict[str, 'IntList']`, in pydantic's tests) is rewritten, since a quoted name is not counted as a
+read. It does not fire on brash's own code.
 
 ## Defects found in the existing codemods
 
