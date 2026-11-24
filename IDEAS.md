@@ -4,7 +4,7 @@ As of 2026-11-24.
 
 Three ideas are worth building, each in a narrowed form: `empty-collections`, `explicit-override`, and star-unpacking
 plus `tuple[X, ...]` in `general-params`. Two more are sound as opt-in codemods, for a project that holds the
-convention. Twelve ideas are shelved, 24 are untested, and three defects turned up in
+convention. Thirteen ideas are shelved, 23 are untested, and three defects turned up in
 the codemods brash already has.
 
 ## Next steps, in order
@@ -48,7 +48,8 @@ entry, and its PR says how the numbers it relies on were checked again, or that 
    (decision D). `docstring-types` second: it needs a Google docstring parser and decision E.
 8. **Test before building anything else.** Of the untested ideas, `todo-colons` is the one to try first: smallest,
    safest, and ruff reports it with no fix. `section-order` is next if step 7 brings a docstring parser. Give the
-   others no time until someone asks for one: fifteen of eighteen tested ideas failed.
+   others no time until someone asks for one: sixteen of nineteen tested ideas failed.
+   - [x] `todo-colons` tested on the whole corpus and shelved: see its entry under Shelved.
 
 Not to do: anything under Shelved without the fact its "Reopen if" names, and anything under "Rejected without
 testing".
@@ -113,7 +114,7 @@ does in a way a person should decide each time.
 
 ### What survived testing
 
-Testing showed the seven rules are necessary but not enough. Fifteen of the eighteen ideas tested in depth failed on
+Testing showed the seven rules are necessary but not enough. Sixteen of the nineteen ideas tested in depth failed on
 something the rules do not name. The ones that survived share four traits:
 
 - **Something already asks for it.** A strict type checker or a lint reports the site and offers no fix.
@@ -187,7 +188,7 @@ running it by default, not against building it as opt-in.
 | `returns-none` | New | Untested | Removes a Returns section that says `None` | Rate only: all 104 hits in litestar |
 | `args-order` | New | Untested | Args entries in signature order | Rate only: 0.50 per 100 files |
 | `section-names` | New | Untested | `Parameters:` to `Args:` and the like | Rate only: 0.22 per 100 files |
-| `todo-colons` | New | Untested | `# TODO x` to `# TODO: x` | Safest and smallest; ruff reports, no fix |
+| `todo-colons` | New | Shelved | `# TODO x` to `# TODO: x` | 31 sites in 7,424 files, none in the 2 projects that lint for it |
 | `narrow-try` | New | Untested | Moves a trailing `return` out of a `try` body | TRY300 is often switched off |
 | `final-attributes` | New | Untested | `Final` on a private attribute assigned once | Nothing asks for it; likely noise |
 | `match-chains` | New | Untested | Equality `if`/`elif` chain to `match` | Taste; wide diffs |
@@ -532,7 +533,7 @@ the parser.
 
 ## Shelved
 
-Twelve ideas were tested or ruled out by a test and are not worth building as they stand. Each entry records why, so
+Thirteen ideas were tested or ruled out by a test and are not worth building as they stand. Each entry records why, so
 the same ground is not covered twice. The "reopen if" lines are suggestions drawn from the evidence, not tested claims.
 
 ### sorted-sets
@@ -745,9 +746,45 @@ accepts for constants.
 
 **Reopen if** a decidable rule separates a label from a description.
 
+### todo-colons
+
+**Motivation.** A TODO tag is conventionally followed by a colon and a space, `# TODO(author): text`. ruff's TD004 and
+TD007 (flake8-todos) report a comment without them, and offer no fix; only TD006, the tag's capitalisation, has one.
+
+**Rewrite.** `# TODO fix this` becomes `# TODO: fix this`, `# TODO(alice) fix` becomes `# TODO(alice): fix`, and
+`# TODO:fix` becomes `# TODO: fix`.
+
+**Leaves alone.** A bare `# TODO`, which has no text to put after a colon, and a tag followed by punctuation (`-`, `,`,
+`.`, `?`), where the colon would replace a character the author chose. `FIXME` and `XXX`, which TD001 calls invalid
+tags, and `todo`, which TD006 already fixes. A `TODO` that does not open the comment. It would also have to leave alone
+`# TODO (text)`, with a space before the parenthesis: ruff reads the parenthesis as an author before the rewrite and as
+the description after it.
+
+**Evidence.** Tested on 2026-11-24, on the current sdists of all 30 corpus projects: 7,424 files that parse. A prototype
+`Command` with a `leave_Comment` and a regular expression for `wants`, in the session's scratch directory and not
+checked in.
+
+- 31 sites in 26 files, 0.42 per 100 files, in 7 of the 30 projects; 16 are in pydantic and 8 in urllib3.
+- The form it writes is already the norm: 288 TODO comments in the corpus have the colon and space, 31 have neither, 1
+  is bare and 3 use punctuation.
+- 29 of 31 rewrites were right and 2 debatable: `# TODO V3: this ...`, which gains a second colon, and
+  `# TODO (fix in pluggy?)`, the parenthesis case above. None was wrong.
+- Every output parses, and a second run changes nothing, also after `ruff format`.
+- On the 26 files, ruff's TD004 reports fall from 34 to 3; the 3 left are a `todo`, a `TODO -` and a `FIXME`, each a
+  form it leaves alone. The one other change is the parenthesis case, which trades a TD005 for a TD002.
+
+**Why shelved.** It fails the rate trait where it is wanted. Only 2 of the 30 projects lint for TD004, polyfactory and
+tox, which select `ALL` and keep the TD rules; attrs, nox and structlog select `ALL` and turn them off. Those 2 have no
+site, since ruff already holds them to the convention. Every site is in a project that does not ask for it, where it is
+a one-off backlog rather than a standing convention, and a one-off respelling needs no codemod. As an opt-in codemod it
+would help only on the day a project turns TD004 on, which a search and replace serves as well.
+
+**Reopen if** projects that adopt ruff's TD rules are found to keep writing the form without the colon, so that the
+lint fails often enough to want a fix.
+
 ## Untested
 
-Twenty-four ideas have a written spec and no evidence. Expect few to survive: of the eighteen tested, fifteen did not.
+Twenty-three ideas have a written spec and no evidence. Expect few to survive: of the nineteen tested, sixteen did not.
 The index gives each one's rewrite and the strongest objection raised when it was proposed.
 
 ### The docstring family
@@ -770,19 +807,18 @@ documentation builds read.
 
 ### Lower-tier ideas
 
-The other twenty were ranked lowest at ideation and have not been prototyped. Many were ranked low as "taste" or
+The other nineteen were ranked lowest at ideation and have not been prototyped. Many were ranked low as "taste" or
 "contested", which is an argument about defaults: `strenum-values`, `match-chains`, `param-ids`, `patch-blocks`,
 `positive-conditions`, `named-expressions` and `attribute-docstrings` could each be an opt-in codemod if the rewrite
-proves sound. Three notes for whoever picks one up:
+proves sound. Two notes for whoever picks one up:
 
-- `todo-colons` was called the safest and smallest of all the ideas: it respells a comment tag, and ruff's TD004 and
-  TD007 report it with no fix.
 - `mock-namespace` and `lazy-logging` are named in the README as examples of a project's own codemod. With opt-in
   codemods they could ship in brash instead; that is the maintainers' call.
 - `concrete-returns`, `never-returns`, `keyword-flags` and `final-classes` each change something another module can see.
   That is the trait that sank `self-returns` and `object-params`.
 
-The index is the whole record of these twenty: their fuller specs were not kept.
+The index is the whole record of these nineteen: their fuller specs were not kept. A twentieth, `todo-colons`, was
+tested and is under Shelved.
 
 ## Rejected without testing
 
