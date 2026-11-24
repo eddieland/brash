@@ -1,23 +1,27 @@
-"""Widen a parameter annotated `list`, `dict`, `set`, or `frozenset` that its function only reads to the abstract type.
+"""Widen a parameter annotated with a concrete collection that its function only reads to the abstract type.
+
+The concrete collections are `list`, `dict`, `set`, `frozenset`, and a tuple of any length, `tuple[X, ...]`.
 
 A parameter takes the most general type its body needs (AGENTS.md, Code conventions), so a caller may pass a tuple, a
 frozenset, or a mapping proxy. Here `def total(costs: list[float])` whose body only sums over `costs` once becomes
 `def total(costs: Iterable[float])`. Each use of the parameter in the body says what it needs:
 
-- one pass, by a `for`, a comprehension, a `", ".join`, or a builtin known to iterate its argument once and keep
+- one pass, by a `for`, a comprehension, a `", ".join`, a builtin known to iterate its argument once and keep
   nothing of it (`sum`, `sorted`, `any`, `all`, `tuple`, `list`, `set`, `frozenset`, `dict`, `enumerate`, `zip`,
-  `min`, `max`): `Iterable`;
+  `min`, `max`), or a star, `*p`, among any call's arguments or in a list, tuple, or set display: `Iterable`;
 - `len`, `in`, a test of its truth, or more than one pass, a loop inside a loop among them: `Collection`;
-- indexing, slicing, `reversed`, `.index`, or `.count` of a `list`: `Sequence`;
-- any of these of a `dict`, or `[]`, `.get`, `.items`, `.keys`, or `.values`: `Mapping`;
+- indexing, slicing, `reversed`, `.index`, or `.count` of a `list` or a tuple: `Sequence`;
+- any of these of a `dict`, or `[]`, `.get`, `.items`, `.keys`, `.values`, or two stars, `**p`, among any call's
+  arguments or in a dict display: `Mapping`;
 - `in` on a `set` or `frozenset`: `AbstractSet` (`collections.abc.Set`), never `Collection`, which would also take a
   bare `str`, where `in` is a substring test.
 
 It is deliberately narrow, since a wrong widening fails the type checker at a call site or an override. It leaves alone:
 
-- a parameter used in any other way: mutated, stored, returned, yielded, compared, formatted, unpacked, or passed to
-  any other call (`json.dumps` and `isinstance` among them), whose needs it cannot see, or to a builtin's name the
-  module binds anywhere, which is then no builtin;
+- a parameter used in any other way: mutated, stored, returned, yielded, compared, formatted, unpacked by an
+  assignment, starred among a class's bases or in a subscript, or passed to any other call (`json.dumps` and
+  `isinstance` among them), whose needs it cannot see, or to a builtin's name the module binds anywhere, which is
+  then no builtin; so a tuple used as a tuple, hashed, used as a key, concatenated, or `%`-formatted, stays one;
 - a parameter its function binds again, or that a nested function, lambda, or class names;
 - a parameter its function never reads, which says nothing of what it needs, and one whose function returns the very
   type it is annotated with;
@@ -29,7 +33,8 @@ It is deliberately narrow, since a wrong widening fails the type checker at a ca
 - a method of a class with a base other than `object`, which may override or implement one declared elsewhere, or a
   protocol's, which its implementations must match, and one of a class the module derives another from, whose
   override may keep the concrete type; a method under an `if` or `try` in a class body is a method still;
-- an annotation spelled any other way: quoted, a union, or a bare `list`.
+- an annotation spelled any other way: quoted, a union, a bare `list`, a tuple of a fixed length (`tuple[int, str]`,
+  `tuple[()]`, `tuple[*Ts]`), and a `tuple[X, ...]` with a comment or its own parentheses inside its brackets.
 
 The abstract type is imported from `collections.abc`: under the module's `if TYPE_CHECKING:` block when it has one
 (on lines of its own) and postpones its annotations, else among the module's own imports; an import inside a
@@ -38,7 +43,7 @@ the name otherwise anywhere, such as `Sequence` from `typing` or a class's `Mapp
 of that type as they are.
 
 Which parameters to widen is decided from the stdlib's syntax tree, and only for a module whose text subscripts one of
-the four types, so a module with none to widen is never parsed by libcst (`Command.wants`).
+the five types, so a module with none to widen is never parsed by libcst (`Command.wants`).
 """
 
 from __future__ import annotations
@@ -62,9 +67,9 @@ if TYPE_CHECKING:
     from libcst.codemod import CodemodContext
 
 #: What the text of a module with a parameter to widen must hold: one of the concrete types subscripted.
-SUBSCRIPTED: Final = re.compile(r"\b(?:list|dict|set|frozenset)\[")
-#: The concrete types a parameter is widened from.
-CONCRETE: Final = frozenset({"dict", "frozenset", "list", "set"})
+SUBSCRIPTED: Final = re.compile(r"\b(?:list|dict|set|frozenset|tuple)\[")
+#: The concrete types a parameter is widened from; a `tuple` only as `tuple[X, ...]`.
+CONCRETE: Final = frozenset({"dict", "frozenset", "list", "set", "tuple"})
 #: The builtins that read their first argument by iterating it once, and keep nothing of it but its items.
 ITERATING: Final = frozenset({"all", "any", "dict", "enumerate", "frozenset", "list", "set", "sorted", "sum", "tuple"})
 #: The decorators that leave a function's parameters as its callers see them, by their dotted names.
@@ -94,7 +99,7 @@ _ABC: Final = "collections.abc"
 class GeneralParams(Command):
     """Widen each parameter annotated with a concrete collection that its function only reads."""
 
-    DESCRIPTION = "Widen a `list`, `dict`, `set`, or `frozenset` parameter only read to the abstract type it needs."
+    DESCRIPTION = "Widen a `list`, `dict`, `set`, `frozenset`, or `tuple[X, ...]` parameter only read to what it needs."
     METADATA_DEPENDENCIES = (PositionProvider,)
 
     def __init__(self, context: CodemodContext) -> None:
@@ -157,6 +162,15 @@ class GeneralParams(Command):
         if abstract is None or annotation is None or not isinstance(annotation.annotation, cst.Subscript):
             return updated_node
         head = annotation.annotation.with_changes(value=cst.Name(abstract))
+        match annotation.annotation:
+            case cst.Subscript(value=cst.Name(value="tuple"), slice=[item, last], rbracket=bracket):
+                # `tuple[X, ...]` names its items' type first, and the abstract type takes that alone. A comma after
+                # it would make it a tuple, so what follows a comma after the `...` is kept before the bracket.
+                if isinstance(last.comma, cst.Comma):
+                    bracket = bracket.with_changes(whitespace_before=last.comma.whitespace_after)
+                head = head.with_changes(slice=[item.with_changes(comma=cst.MaybeSentinel.DEFAULT)], rbracket=bracket)
+            case _:
+                pass
         return updated_node.with_changes(annotation=annotation.with_changes(annotation=head))
 
 
@@ -181,7 +195,7 @@ def widened(source: str) -> dict[tuple[int, str], str]:
         if function.name in named or not _plain(function, parents, subclassed):
             continue
         for argument in [*function.args.posonlyargs, *function.args.args, *function.args.kwonlyargs]:
-            abstract = _abstract(function, argument, parents, bound)
+            abstract = _abstract(function, argument, parents, bound, source)
             if abstract is not None and abstract not in bound:
                 found[argument.lineno, argument.arg] = abstract
     return found
@@ -204,16 +218,19 @@ class _Read(Enum):
     ORDERED = auto()
     #: A dict's `.get`, `.items`, `.keys`, or `.values` called.
     LOOKUP = auto()
+    #: Spread by two stars: `f(**p)` or `{**p}`.
+    SPREAD = auto()
 
 
 #: The reads each concrete type allows, beside a pass, a measure, and `in`, which every one allows.
 _ALLOWED: Final[Mapping[str, frozenset[_Read]]] = {
-    "dict": frozenset({_Read.SUBSCRIPT, _Read.LOOKUP}),
+    "dict": frozenset({_Read.SUBSCRIPT, _Read.LOOKUP, _Read.SPREAD}),
     "frozenset": frozenset(),
     "list": frozenset({_Read.SUBSCRIPT, _Read.ORDERED}),
     "set": frozenset(),
+    "tuple": frozenset({_Read.SUBSCRIPT, _Read.ORDERED}),
 }
-#: The methods of a list and of a dict that only read it.
+#: The methods of a list or a tuple, and of a dict, that only read it.
 _METHODS: Final[Mapping[str, _Read]] = {
     "count": _Read.ORDERED,
     "get": _Read.LOOKUP,
@@ -397,6 +414,7 @@ def _abstract(
     argument: ast.arg,
     parents: Mapping[ast.AST, ast.AST],
     bound: AbstractSet[str],
+    source: str,
 ) -> str | None:
     """The abstract type a parameter takes, when its function only reads it.
 
@@ -405,6 +423,7 @@ def _abstract(
         argument: One of its parameters.
         parents: Each node of the module's tree by the node it is in.
         bound: The names the module binds anywhere, so that a builtin of the same name is no read.
+        source: The module's text, where a tuple's annotation is read as it is spelled.
 
     Returns:
         The type's name, of `ABSTRACT`, or None for a parameter to leave as it is.
@@ -414,6 +433,8 @@ def _abstract(
             pass
         case _:
             return None
+    if head == "tuple" and not _any_length(annotation, source):
+        return None
     if function.returns is not None and ast.dump(function.returns) == ast.dump(annotation):
         return None
     uses = _uses(function, argument.arg)
@@ -426,6 +447,21 @@ def _abstract(
             return None
         reads.append(_Read.PASSES if read is _Read.PASS and _repeated(use, function, parents) else read)
     return _choose(head, reads)
+
+
+def _any_length(annotation: ast.Subscript, source: str) -> bool:
+    """Whether a `tuple[...]` annotation is `tuple[X, ...]`, spelled so that its items' type can be kept alone.
+
+    Returns:
+        True for one with no comment inside its brackets, which dropping the `...` could lose, and no parentheses
+        of its own there.
+    """
+    match annotation.slice:
+        case ast.Tuple(elts=[item, ast.Constant(value=last)]) if last is ... and not isinstance(item, ast.Starred):
+            inner = ast.get_source_segment(source, annotation.slice) or "("
+            return "#" not in inner and not inner.startswith("(")
+        case _:
+            return False
 
 
 def _shadowed(use: ast.expr, parents: Mapping[ast.AST, ast.AST], bound: AbstractSet[str]) -> bool:
@@ -528,7 +564,7 @@ def _read(use: ast.expr, parents: Mapping[ast.AST, ast.AST]) -> _Read | None:
             called = isinstance(call := parents.get(parent), ast.Call) and call.func is parent
             return _METHODS[attr] if called else None
         case _:
-            return _Read.SIZED if _tested(use, parents) else None
+            return _Read.SIZED if _tested(use, parents) else _spread(use, parents)
 
 
 def _sliced(subscript: ast.Subscript, parents: Mapping[ast.AST, ast.AST]) -> _Read | None:
@@ -596,6 +632,43 @@ def _tested(node: ast.expr, parents: Mapping[ast.AST, ast.AST]) -> bool:
             return False
 
 
+def _spread(use: ast.expr, parents: Mapping[ast.AST, ast.AST]) -> _Read | None:
+    """What a parameter under one star or two needs of its type: `f(*p)`, `[*p]`, `f(**p)`, `{**p}`.
+
+    Returns:
+        A pass for one star, a spread for two, or None for a use that is neither.
+    """
+    parent = parents[use]
+    match parent:
+        case ast.Starred(ctx=ast.Load()):
+            return _Read.PASS if _starred(parent, parents) else None
+        case ast.keyword(arg=None):
+            return _Read.SPREAD
+        case ast.Dict(keys=keys, values=values):
+            spread = any(key is None and value is use for key, value in zip(keys, values, strict=True))
+            return _Read.SPREAD if spread else None
+        case _:
+            return None
+
+
+def _starred(star: ast.Starred, parents: Mapping[ast.AST, ast.AST]) -> bool:
+    """Whether a star unpacks a parameter where each item is taken once: a call's arguments, or a display.
+
+    Returns:
+        True among a call's arguments or in a list, tuple, or set display; False among a class's bases, and in a
+        subscript, `x[*p]`, which is no display.
+    """
+    parent = parents[star]
+    match parent:
+        case ast.Call() | ast.List() | ast.Set():
+            return True
+        case ast.Tuple():
+            around = parents.get(parent)
+            return not (isinstance(around, ast.Subscript) and around.slice is parent)
+        case _:
+            return False
+
+
 def _repeated(
     use: ast.Name,
     function: ast.FunctionDef | ast.AsyncFunctionDef,
@@ -642,7 +715,7 @@ def _choose(head: str, reads: Collection[_Read]) -> str | None:
         return "Mapping"
     if kinds:
         return "Sequence"
-    if _Read.CONTAINS in reads and head != "list":
+    if _Read.CONTAINS in reads and head in {"frozenset", "set"}:
         return "AbstractSet"
     return "Iterable" if list(reads) == [_Read.PASS] else "Collection"
 
