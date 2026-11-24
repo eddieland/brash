@@ -20,7 +20,7 @@ entry, and its PR says how the numbers it relies on were checked again, or that 
    each is a few lines with a case. See "Defects found in the existing codemods".
    - [x] `type-aliases`: leave alone an alias with a quoted name directly inside a `Union` or `Optional`. First,
      because the result raises at run time, and two corpus aliases hit it.
-   - [ ] `general-params`: check the slice's parent for a shadowed builtin, not only the parameter's own.
+   - [x] `general-params`: check the slice's parent for a shadowed builtin, not only the parameter's own.
    - [ ] `general-params`: leave alone a function the module names as a value. This one waits on decision A below,
      because it changes what the codemod rewrites today.
    - [ ] brash's own two parameters, `_choose` and `_with_imports`. Trivial, and by hand.
@@ -754,15 +754,15 @@ The scout that found the two extensions above also measured these and dropped th
 ## Defects found in the existing codemods
 
 Three defects in codemods brash already ships turned up during testing. All three were reproduced against the current
-code. The first is fixed; the other two are not, nor filed.
+code. The first two are fixed; the third is not, nor filed.
 
 - [x] **`type-aliases` and ruff together write an alias that raises.** `HighlighterType = Callable[[Union[str, "Text"]],
   "Text"]` becomes a `type` statement, and ruff's safe UP007 fix then writes `Callable[[str | "Text"], "Text"]`. Reading
   `__value__` raises `TypeError`. Two corpus aliases hit it: `rich/console.py:68` and `aiohttp/web_urldispatcher.py:86`.
   Fixed by leaving alone an alias with a quoted name directly inside a `Union` or `Optional`, at any depth.
-- [ ] **`general-params` misses a shadowed builtin around a slice.** With `from mylib import sorted`, it correctly
+- [x] **`general-params` misses a shadowed builtin around a slice.** With `from mylib import sorted`, it correctly
   leaves `len(sorted(items))` alone but widens `items: list[str]` to `Sequence[str]` in `len(sorted(items[1:]))`.
-  `_shadowed` checks the parameter's own parent, not the slice's.
+  `_shadowed` checked the parameter's own parent, not the slice's; it now follows a slice to the call around it.
 - [ ] **`general-params` widens a function the module hands to a framework.** `def main(files: list[str])` passed to
   `typer.run(main)` becomes `Iterable[str]`, and typer reads the annotation at run time. The rewrite was confirmed;
   typer itself was not run. 49 of the codemod's 417 corpus sites are in functions the module names as a value. The
