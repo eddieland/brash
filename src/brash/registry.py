@@ -9,7 +9,8 @@ the name its command line takes, as the module that holds it and the class's nam
 The module is imported as any other is, from the environment brash runs in or from the directory that holds that
 file, so a project's codemod need not be installed. The class is a `command.Command`. A project's codemods
 run after brash's own, in the order the table gives them. `config` reads the table, and its `select`, `extend-select`
-and `ignore` there say which of them all a run leaves out, as its `per-file-ignores` says for some files alone.
+and `ignore` there say which of them all a run leaves out, as its `per-file-ignores` says for some files alone. A
+codemod that is `OPT_IN`, brash's own or the project's, runs only where `select` or `extend-select` names it.
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ from brash.general_params import GeneralParams
 from brash.type_aliases import TypeAliases
 
 if TYPE_CHECKING:
-    from collections.abc import Collection, Iterable, Mapping
+    from collections.abc import Iterable, Mapping
 
     from brash.config import Project
 
@@ -68,10 +69,11 @@ def registered(project: Project) -> dict[str, type[Command]]:
     return codemods
 
 
-def selected(project: Project, codemods: Collection[str]) -> list[str]:
+def selected(project: Project, codemods: Mapping[str, type[Command]]) -> list[str]:
     """The codemods a run in a project runs by default.
 
-    They are those its `select` names, or all, and those its `extend-select` names, but for its `ignore`.
+    They are those its `select` names, or all but those that are `OPT_IN`, and those its `extend-select` names, but
+    for its `ignore`.
 
     Those its `per-file-ignores` names are checked here too, though they are left out file by file, by the run.
 
@@ -98,7 +100,8 @@ def selected(project: Project, codemods: Collection[str]) -> list[str]:
                 there = ", ".join(f"`{known}`" for known in codemods)
                 where = project.setting(*keys)
                 raise RegistryError(f"{where}: `{name}` is not a codemod; there are {there}")
-    chosen = codemods if select is None else {*select, *extend}
+    default = [name for name, codemod in codemods.items() if not codemod.OPT_IN]
+    chosen = {*(default if select is None else select), *extend}
     return [name for name in codemods if name in chosen and name not in ignore]
 
 

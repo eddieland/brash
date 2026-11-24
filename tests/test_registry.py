@@ -411,6 +411,30 @@ def test_extend_select_with_no_select_leaves_every_codemod_running(project: Path
     assert chosen == [*CODEMODS, "rename"]
 
 
+def test_a_codemod_off_by_default_runs_only_where_select_extend_select_or_only_names_it(project: Path) -> None:
+    (project / "local_codemods" / "rename.py").write_text(
+        LOCAL.replace("    DESCRIPTION", "    OPT_IN = True\n    DESCRIPTION"),
+    )
+    stale = project / "stale.py"
+    stale.write_text(BEFORE)
+    chosen: list[list[str]] = []
+    for settings in ["", "extend-select = ['rename']\n", "select = ['rename']\n"]:
+        configure(project, CONFIGURED + settings)
+        chosen.append(registry.selected(config.load(project), registry.registered(config.load(project))))
+    configure(project, CONFIGURED)
+
+    _, listed = invoke("--list")
+    by_default = invoke(stale)
+    left = stale.read_text()
+    only = invoke("--only", "rename", stale)
+
+    assert chosen == [[*CODEMODS], [*CODEMODS, "rename"], ["rename"]]
+    assert listed.splitlines()[-1] == "rename  Rename `OLD` to `NEW`. (off by default)"
+    assert by_default[0] == only[0] == 0
+    assert left == "from typing import Final\n\nOLD: Final = 3\n"
+    assert stale.read_text() == "from typing import Final\n\nNEW: Final = 3\n"
+
+
 def test_selecting_none_runs_none(project: Path) -> None:
     stale = project / "stale.py"
     stale.write_text(BEFORE)

@@ -74,9 +74,10 @@ class Config(BaseModel):
     They run after brash's own, in the table's order.
     """
     select: tuple[str, ...] | None = None
-    """The codemods that run, by name, brash's own or the project's: an allowlist. Every codemod, when it is not set.
+    """The codemods that run, by name, brash's own or the project's: an allowlist.
 
-    They run in brash's order whatever the list's, and `--only` on the command line is taken in place of it.
+    When it is not set, every codemod runs but those off by default (`OPT_IN`). They run in brash's order whatever the
+    list's, and `--only` on the command line is taken in place of it.
     """
     extend_select: tuple[str, ...] = Field(default=(), alias="extend-select")
     """The codemods that run as well, by name: added to those of `select`, or to those that run by default."""
