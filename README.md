@@ -69,7 +69,8 @@ lint:
 ```
 
 Every codemod runs by default. A project turns one off, or names the few it wants, with `ignore` and `select` in
-its [configuration](#configuration); `--only` names the ones for a single run, and is taken in place of both.
+its [configuration](#configuration); `--only` names the ones for a single run, and is taken in place of both. Its
+`per-file-ignores` there turns one off for some files alone.
 
 A project whose code runs on a Python older than 3.12 sets its `target-version`, and a codemod that writes syntax
 that Python does not have, which is `type-aliases`, does not run; `--target-version py310` says it for a single run.
@@ -84,6 +85,9 @@ target-version = "py310"
 ignore = ["general-params"]
 exclude = ["src/app/_generated", "*_pb2.py"]
 
+[tool.brash.per-file-ignores]
+"tests/*" = ["general-params"]
+
 [tool.brash.codemods]
 no-print = "codemods.no_print:NoPrint"
 ```
@@ -94,6 +98,10 @@ no-print = "codemods.no_print:NoPrint"
   `ignore` does not name. Either takes your project's own codemods as it takes brash's, and a name no codemod has
   fails the run. The order codemods run in is brash's, whatever the list's. `--only` on the command line is taken in
   place of both, so it runs an ignored codemod, and `--list` lists every codemod, on or off.
+- **`per-file-ignores`** turns codemods off for some files alone: each key is a glob pattern, as `exclude`'s are and
+  matching what one would, and its value the codemods that do not run on the files it matches. A file that several
+  patterns match is rewritten by none of the codemods any of them names. It holds for a file named outright, and for
+  a codemod `--only` names: `--only` runs it on the project's other files. A name no codemod has fails the run.
 - **`target-version`** is the oldest Python the project's code runs on, as ruff spells it: `py310` for 3.10. A
   codemod whose output needs a later Python does not run, named by `--only` or not. Left out, every codemod runs,
   whatever the project's `requires-python`: brash does not read it. `--target-version` on the command line is taken
@@ -113,6 +121,9 @@ target-version = "py310"
 ignore = ["general-params"]
 exclude = ["src/app/_generated", "*_pb2.py"]
 
+[per-file-ignores]
+"tests/*" = ["general-params"]
+
 [codemods]
 no-print = "codemods.no_print:NoPrint"
 ```
@@ -124,7 +135,7 @@ not have, or a value of the wrong type, fails the run with exit code 1 and a lin
 key:
 
 ```text
-Error: /repo/pyproject.toml: tool.brash.excludes: no such setting; there are `codemods`, `select`, `ignore`, `target-version`, `exclude`
+Error: /repo/pyproject.toml: tool.brash.excludes: no such setting; there are `codemods`, `select`, `ignore`, `per-file-ignores`, `target-version`, `exclude`
 ```
 
 ## As a git hook

@@ -9,7 +9,7 @@ the name its command line takes, as the module that holds it and the class's nam
 The module is imported as any other is, from the environment brash runs in or from the directory that holds that
 file, so a project's codemod need not be installed. The class is a `command.Command`. A project's codemods
 run after brash's own, in the order the table gives them. `config` reads the table, and its `select` and `ignore` there
-say which of them all a run leaves out.
+say which of them all a run leaves out, as its `per-file-ignores` says for some files alone.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from brash.general_params import GeneralParams
 from brash.type_aliases import TypeAliases
 
 if TYPE_CHECKING:
-    from collections.abc import Collection, Mapping
+    from collections.abc import Collection, Iterable, Mapping
 
     from brash.config import Project
 
@@ -71,6 +71,8 @@ def registered(project: Project) -> dict[str, type[Command]]:
 def selected(project: Project, codemods: Collection[str]) -> list[str]:
     """The codemods a run in a project runs by default: those its `select` names, or all, but for its `ignore`.
 
+    Those its `per-file-ignores` names are checked here too, though they are left out file by file, by the run.
+
     Args:
         project: The project, whose configuration may hold either list.
         codemods: Every codemod the run has by name, in the order they run on a file.
@@ -79,14 +81,16 @@ def selected(project: Project, codemods: Collection[str]) -> list[str]:
         The names, in that order.
 
     Raises:
-        RegistryError: When either list names no codemod.
+        RegistryError: When either list, or one of `per-file-ignores`, names no codemod.
     """
     select, ignore = project.config.select, project.config.ignore
-    for setting, names in (("select", select or ()), ("ignore", ignore)):
+    settings: list[tuple[tuple[str, ...], Iterable[str]]] = [(("select",), select or ()), (("ignore",), ignore)]
+    settings += [(("per-file-ignores", pattern), names) for pattern, names in project.config.per_file_ignores.items()]
+    for keys, names in settings:
         for name in names:
             if name not in codemods:
                 there = ", ".join(f"`{known}`" for known in codemods)
-                where = project.setting(setting)
+                where = project.setting(*keys)
                 raise RegistryError(f"{where}: `{name}` is not a codemod; there are {there}")
     return [name for name in codemods if (select is None or name in select) and name not in ignore]
 
