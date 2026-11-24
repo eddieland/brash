@@ -45,6 +45,7 @@ entry, and its PR says how the numbers it relies on were checked again, or that 
 6. **Take the `Union[...]` and `Optional[...]` rider into `type-aliases`.** About 12 lines once the first defect of
    step 1 has added the quoted-member guard it shares. Rare, so only if a maintainer says the rate bar does not apply
    to one more row of a table.
+   - [x] Done, the rate bar judged not to apply. See "Built" in its entry.
 7. **The two opt-in ideas**, after step 2, each behind a decision. Narrower `Sequence` and `Collection` first: it is
    the AGENTS.md rule and the only idea that fires on brash, but it needs brash to remove an import it orphans
    (decision D). `docstring-types` second: it needs a Google docstring parser and decision E.
@@ -171,7 +172,7 @@ running it by default, not against building it as opt-in.
 | `empty-collections` | New | Build | Annotates an empty list, dict or set from the return annotation or a `join` | 214 sites, 53 of 54 right, invisible outside the function |
 | `explicit-override` | New | Build | `@override` where the base class is in the same module | 775 sites, 0 wrong, no new diagnostics |
 | Star-unpacking and `tuple[X, ...]` | `general-params` | Build | Counts `*p` and `**p` as reads; widens `tuple[X, ...]` | 157 sites, 78 of 82 right |
-| `Union[...]` and `Optional[...]` aliases | `type-aliases` | Rider | Takes an alias ruff reports and cannot fix | 59 of 59 right, about 12 lines, but 59 sites |
+| `Union[...]` and `Optional[...]` aliases | `type-aliases` | Rider | Takes an alias ruff reports and cannot fix | 59 of 59 right, about 12 lines, but 59 sites; built, the rate bar judged not to apply to a row of a table |
 | Optional collections | `general-params` | Rider | Widens `list[X] \| None` | 27 of 31 right, but 31 sites; built after its parent, the pinned case judged spelling |
 | `sorted-sets` | New | Shelved | Sorts a set display's elements | 12 of 64 destroyed a meaningful order |
 | `single-with` | New | Shelved | Merges nested `with` statements | ruff's fix already does 81% at 120 columns |
@@ -458,6 +459,29 @@ rewritten and 8 kept.
 
 **Reopen if** the rate bar is judged not to apply to one more entry in a table. The quoted-member guard it needs is in the
 parent already, as the fix of the first defect.
+
+**Built** in `_is_alias` of `src/brash/type_aliases.py`, 3 lines and a comment, from this entry and not from the
+prototype, which was not kept. The maintainer left the open decisions to the agent's judgement, and this one is
+decided as the condition above reads: the rate bar does not apply. The bar weighs a codemod's cases against how often
+a maintainer sees it run, and this is no codemod: it is one more spelling of a union in a codemod that reads unions
+already, behind a guard that shipped with the first defect's fix. The optional-collections rider was built at 0.42
+sites per 100 files, and this one is at 0.79. It is the form the entry describes, with nothing left out:
+
+- A `Union[...]` of two members or more, and an `Optional[...]`, are aliases, by the last name of what is subscripted,
+  so `typing.Union` and `t.Optional` are read too.
+- `Union[X]` with one member is left alone. An alias with a quoted name directly inside a `Union` or `Optional` is
+  left alone by the guard, now also where the `Union` is the alias itself: `Node = Union["Node", int]`.
+- Everything else is the parent's: a name read at run time, a generic alias, and a member that is no type stay.
+
+Checked again on the current sdists of the 30 projects, 7,424 files that parse: 187 sites in 116 files before, 246 in
+141 after, so 59 new sites in 30 files, 6 of them in tests or examples; no site is lost. The count is the entry's.
+Every rewritten file parses, and a second run changes nothing, also after ruff 0.17.6's fix of UP007 and UP045, its
+import fix and its format. ruff then writes the `|` in 58 of the 59, and none of them has a quoted name beside a `|`.
+The one it reports and does not fix is httpx's `FileTypes`, a `Union[...]` with a comment above each member. All 59
+were read as a list of the assignments, not with the code around them: each is a union of types. The three type
+checkers were not run on the corpus again, and no test suite was.
+
+It does not fire on brash's own code.
 
 ### general-params: optional collections
 

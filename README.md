@@ -203,10 +203,13 @@ The hook runs in an environment of its own, which holds brash and nothing of you
 - **`type-aliases`** spells an implicit type alias as a `type` statement, which ruff does only for one annotated
   `TypeAlias`: `Outcome = Literal["packed", "failed"]` becomes `type Outcome = Literal["packed", "failed"]`. An alias
   is a `CamelCase` name bound once, among the module's own statements, to a `Literal`, a `tuple`, a `Callable`, or a
-  union of types. A `type` statement makes a `TypeAliasType`, not the type it names, so it leaves alone a name the
+  union of types, spelled `A | B`, `Union[A, B]`, or `Optional[A]`: ruff reports the last two and fixes neither in an
+  assignment, and writes the `|` once the alias is a `type` statement. A `type` statement makes a `TypeAliasType`,
+  not the type it names, so it leaves alone a name the
   module reads outside an annotation (passed to `get_args` or `isinstance`, called, subclassed, held in another
   assignment); an `Annotated[...]` alias, whose metadata frameworks read as the program runs; and a union that may be
-  of values, with no `None`, subscript, or builtin type in it. It leaves alone an alias with a quoted name as a member
+  of values, with no `None`, subscript, or builtin type in it, or a `Union[...]` of one member. It leaves alone an
+  alias with a quoted name as a member
   of a `Union[...]` or `Optional[...]`, since ruff then writes `str | "Text"`, which raises when the alias is read. It
   sees one module at a time: where another module reads a rewritten alias at run time, that reader takes its
   `__value__`. The `type` statement is Python 3.12's, so

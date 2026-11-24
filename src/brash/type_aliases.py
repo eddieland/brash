@@ -4,8 +4,11 @@ ruff rewrites an alias annotated `TypeAlias` (UP040), but a bare `Name = <type e
 other to it. Here `Outcome = Literal["packed", "skipped"]` becomes `type Outcome = Literal["packed", "skipped"]`.
 
 An alias is a `CamelCase` name bound once, by an assignment among the module's own statements, to a `Literal`, a
-`tuple`, a `Callable`, or a union of types. A `type` statement makes a `TypeAliasType`, which is not the type it names
-when the program runs, so the rewrite is kept to where that cannot show. It leaves alone:
+`tuple`, a `Callable`, or a union of types, spelled `A | B`, `Union[A, B]`, or `Optional[A]`. ruff reports the last
+two (UP007, UP045) and fixes neither in an assignment; in a `type` statement it writes the `|`.
+
+A `type` statement makes a `TypeAliasType`, which is not the type it names when the program runs, so the rewrite is
+kept to where that cannot show. It leaves alone:
 
 - a name the module reads outside an annotation: passed to `get_args`, `isinstance`, or any other call, subscripted,
   called, subclassed, or assigned to another name. A read inside another alias this codemod rewrites, or inside a
@@ -13,6 +16,7 @@ when the program runs, so the rewrite is kept to where that cannot show. It leav
 - an `Annotated[...]` alias, whose metadata frameworks read at run time, and any other subscript (`dict[str, int]`),
   which may be a class the module calls;
 - a union that may be arithmetic on values: one with no `None`, no subscript, and no builtin type among its members;
+- a `Union[...]` of one member, which is that member and no union;
 - an alias with a quoted name as a member of a `Union[...]` or `Optional[...]`, at any depth. ruff's fix for those
   writes `str | "Text"`, which raises once the `type` statement's value is read;
 - a generic alias, one that names a `TypeVar` the module declares, which a `type` statement spells another way;
@@ -223,11 +227,15 @@ def _is_alias(name: str, value: ast.expr) -> bool:
     """Whether an assignment reads as a type alias this codemod rewrites.
 
     Returns:
-        True for a `CamelCase` name given a `Literal`, `tuple`, or `Callable`, or a union that is one of types.
+        True for a `CamelCase` name given a `Literal`, `tuple`, or `Callable`, or a union that is one of types,
+        spelled with `|`, `Union[...]`, or `Optional[...]`.
     """
     if not name.lstrip("_")[:1].isupper() or CONSTANT.fullmatch(name) or _quotes_a_union_member(value):
         return False
     match value:
+        case ast.Subscript(value=head, slice=inner) if last_name(head) in UNIONS:
+            # `Union[X]` is `X`, which may be a class the module calls, and a type checker rejects it as an alias.
+            return (last_name(head) == "Optional" or isinstance(inner, ast.Tuple)) and _is_type(value)
         case ast.Subscript(value=head):
             return last_name(head) in HEADS and _is_type(value)
         case ast.BinOp(op=ast.BitOr()):

@@ -85,6 +85,48 @@ Rows = Row | list[Row]
 type Rows = Row | list[Row]
 ```
 
+### Union subscript
+
+```python
+StrPath = Union[str, os.PathLike[str]]
+```
+
+```python
+type StrPath = Union[str, os.PathLike[str]]
+```
+
+### Optional
+
+```python
+NoneStr = Optional[str]
+```
+
+```python
+type NoneStr = Optional[str]
+```
+
+### Dotted union and optional
+
+```python
+Value = typing.Union[int, bytes, None]
+Found = t.Optional[Value]
+```
+
+```python
+type Value = typing.Union[int, bytes, None]
+type Found = t.Optional[Value]
+```
+
+### Union of unions
+
+```python
+Key = Union[str, Optional[int], list["Row"]]
+```
+
+```python
+type Key = Union[str, Optional[int], list["Row"]]
+```
+
 ### Keeps comments and layout
 
 ```python
@@ -275,6 +317,38 @@ Either = Left | Right
 Highlighter = Callable[[Union[str, "Text"]], "Text"]
 Found = tuple[Optional["Row"], int]
 Rows = Row | typing.Optional['Row']
+```
+
+### Quoted member of a union alias
+
+```python
+Node = Union["Node", int]
+Found = Optional["Row"]
+```
+
+### Union of one member
+
+```python
+Row = Union[records.Run]
+```
+
+### Union or optional read at run time
+
+```python
+NoneStr = Optional[str]
+StrPath = Union[str, os.PathLike[str]]
+ADAPTER = TypeAdapter(NoneStr)
+
+
+def f(x: object) -> bool:
+    return isinstance(x, get_args(StrPath))
+```
+
+### Union that is not of types
+
+```python
+Count = Union[int, 3]
+Maybe = Optional[1 + 2]
 ```
 
 ### Not a type expression
