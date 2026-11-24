@@ -1,6 +1,7 @@
 """Widen a parameter annotated with a concrete collection that its function only reads to the abstract type.
 
-The concrete collections are `list`, `dict`, `set`, `frozenset`, and a tuple of any length, `tuple[X, ...]`.
+The concrete collections are `list`, `dict`, `set`, `frozenset`, and a tuple of any length, `tuple[X, ...]`, each
+alone or with `| None` after it.
 
 A parameter takes the most general type its body needs (AGENTS.md, Code conventions), so a caller may pass a tuple, a
 frozenset, or a mapping proxy. Here `def total(costs: list[float])` whose body only sums over `costs` once becomes
@@ -16,6 +17,10 @@ frozenset, or a mapping proxy. Here `def total(costs: list[float])` whose body o
 - `in` on a `set` or `frozenset`: `AbstractSet` (`collections.abc.Set`), never `Collection`, which would also take a
   bare `str`, where `in` is a substring test.
 
+A parameter that may be `None`, `costs: list[float] | None`, keeps its `| None` and is read the same way, with two
+reads more. `p is None` and `p is not None` need nothing of its type. `p or other` is read as `p` is, where it stands:
+`sum(costs or [])` is one pass, and gives `Iterable[float] | None`.
+
 It is deliberately narrow, since a wrong widening fails the type checker at a call site or an override. It leaves alone:
 
 - a parameter used in any other way: mutated, stored, returned, yielded, compared, formatted, unpacked by an
@@ -23,8 +28,10 @@ It is deliberately narrow, since a wrong widening fails the type checker at a ca
   `isinstance` among them), whose needs it cannot see, or to a builtin's name the module binds anywhere, which is
   then no builtin; so a tuple used as a tuple, hashed, used as a key, concatenated, or `%`-formatted, stays one;
 - a parameter its function binds again, or that a nested function, lambda, or class names;
-- a parameter its function never reads, which says nothing of what it needs, and one whose function returns the very
-  type it is annotated with;
+- a parameter its function never reads, or only compares with `None`, which says nothing of what it needs, and one
+  whose function returns the very type it is annotated with, or that type without its `| None`;
+- a parameter that may be `None` and is given its default by any other means: bound again (`if p is None: p = []`),
+  or read through a conditional expression, `p if p is not None else []`;
 - every parameter of a function with a decorator other than `staticmethod`, `classmethod`, a context manager's, or
   pytest's: a click command, an overload, an override, and a route whose framework reads its annotations at run time;
 - every parameter of a function the module names other than to call it, as `typer.run(main)` or
@@ -33,8 +40,9 @@ It is deliberately narrow, since a wrong widening fails the type checker at a ca
 - a method of a class with a base other than `object`, which may override or implement one declared elsewhere, or a
   protocol's, which its implementations must match, and one of a class the module derives another from, whose
   override may keep the concrete type; a method under an `if` or `try` in a class body is a method still;
-- an annotation spelled any other way: quoted, a union, a bare `list`, a tuple of a fixed length (`tuple[int, str]`,
-  `tuple[()]`, `tuple[*Ts]`), and a `tuple[X, ...]` with a comment or its own parentheses inside its brackets.
+- an annotation spelled any other way: quoted, any other union (`None | list[X]`, `list[X] | set[X]`,
+  `Optional[list[X]]`), a bare `list`, a tuple of a fixed length (`tuple[int, str]`, `tuple[()]`, `tuple[*Ts]`), and
+  a `tuple[X, ...]` with a comment or its own parentheses inside its brackets.
 
 The abstract type is imported from `collections.abc`: under the module's `if TYPE_CHECKING:` block when it has one
 (on lines of its own) and postpones its annotations, else among the module's own imports; an import inside a
@@ -159,19 +167,16 @@ class GeneralParams(Command):
         line = position.start.line if isinstance(position, CodeRange) else None
         abstract = self._found.get((line, original_node.name.value)) if line is not None else None
         annotation = updated_node.annotation
-        if abstract is None or annotation is None or not isinstance(annotation.annotation, cst.Subscript):
+        if abstract is None or annotation is None:
             return updated_node
-        head = annotation.annotation.with_changes(value=cst.Name(abstract))
         match annotation.annotation:
-            case cst.Subscript(value=cst.Name(value="tuple"), slice=[item, last], rbracket=bracket):
-                # `tuple[X, ...]` names its items' type first, and the abstract type takes that alone. A comma after
-                # it would make it a tuple, so what follows a comma after the `...` is kept before the bracket.
-                if isinstance(last.comma, cst.Comma):
-                    bracket = bracket.with_changes(whitespace_before=last.comma.whitespace_after)
-                head = head.with_changes(slice=[item.with_changes(comma=cst.MaybeSentinel.DEFAULT)], rbracket=bracket)
+            case cst.Subscript() as concrete:
+                general: cst.BaseExpression = _renamed(concrete, abstract)
+            case cst.BinaryOperation(left=cst.Subscript() as concrete) as union:
+                general = union.with_changes(left=_renamed(concrete, abstract))
             case _:
-                pass
-        return updated_node.with_changes(annotation=annotation.with_changes(annotation=head))
+                return updated_node
+        return updated_node.with_changes(annotation=annotation.with_changes(annotation=general))
 
 
 def widened(source: str) -> dict[tuple[int, str], str]:
@@ -393,6 +398,24 @@ def _scope(node: ast.AST, parents: Mapping[ast.AST, ast.AST]) -> ast.AST | None:
     return parent
 
 
+def _renamed(concrete: cst.Subscript, abstract: str) -> cst.Subscript:
+    """A concrete collection's annotation as the abstract type's, with the same items: `list[X]` as `Iterable[X]`.
+
+    Returns:
+        The annotation, of one item where it was `tuple[X, ...]`.
+    """
+    general = concrete.with_changes(value=cst.Name(abstract))
+    match concrete:
+        case cst.Subscript(value=cst.Name(value="tuple"), slice=[item, last], rbracket=bracket):
+            # `tuple[X, ...]` names its items' type first, and the abstract type takes that alone. A comma after
+            # it would make it a tuple, so what follows a comma after the `...` is kept before the bracket.
+            if isinstance(last.comma, cst.Comma):
+                bracket = bracket.with_changes(whitespace_before=last.comma.whitespace_after)
+            return general.with_changes(slice=[item.with_changes(comma=cst.MaybeSentinel.DEFAULT)], rbracket=bracket)
+        case _:
+            return general
+
+
 def _dotted(expression: ast.expr) -> str | None:
     """The dotted name an expression spells: `pytest.mark.parametrize`.
 
@@ -430,23 +453,60 @@ def _abstract(
     """
     match argument.annotation:
         case ast.Subscript(value=ast.Name(id=head)) as annotation if head in CONCRETE:
-            pass
+            optional = False
+        case ast.BinOp(
+            left=ast.Subscript(value=ast.Name(id=head)) as annotation,
+            op=ast.BitOr(),
+            right=ast.Constant(value=None),
+        ) if head in CONCRETE:
+            optional = True
         case _:
             return None
     if head == "tuple" and not _any_length(annotation, source):
         return None
-    if function.returns is not None and ast.dump(function.returns) == ast.dump(annotation):
-        return None
-    uses = _uses(function, argument.arg)
-    if not uses:
+    returned = None if function.returns is None else ast.dump(function.returns)
+    if returned in {ast.dump(annotation), ast.dump(argument.annotation)}:
         return None
     reads: list[_Read] = []
-    for use in uses:
-        read = _read(use, parents)
-        if read is None or _shadowed(use, parents, bound):
+    for use in _uses(function, argument.arg) or ():
+        if optional and _none_test(use, parents):
+            continue
+        read_as = _defaulted(use, parents) if optional else use
+        read = _read(read_as, parents)
+        if read is None or _shadowed(read_as, parents, bound):
             return None
         reads.append(_Read.PASSES if read is _Read.PASS and _repeated(use, function, parents) else read)
-    return _choose(head, reads)
+    return _choose(head, reads) if reads else None
+
+
+def _none_test(use: ast.expr, parents: Mapping[ast.AST, ast.AST]) -> bool:
+    """Whether a read of a parameter only compares it with `None`: `p is None`, `p is not None`.
+
+    Returns:
+        True when it does, which needs nothing of the parameter's type.
+    """
+    match parents[use]:
+        case ast.Compare(left=left, ops=[ast.Is() | ast.IsNot()], comparators=[ast.Constant(value=None)]):
+            return left is use
+        case _:
+            return False
+
+
+def _defaulted(use: ast.expr, parents: Mapping[ast.AST, ast.AST]) -> ast.expr:
+    """The expression a parameter that may be `None` is read as: the `p or other` it stands in, or itself.
+
+    The `or` gives the parameter or what follows it, so whatever reads the `or` reads the parameter. Last in it, the
+    parameter has no default, and is read as itself.
+
+    Returns:
+        The outermost such `or`, or the read itself where it stands in none.
+    """
+    parent = parents[use]
+    match parent:
+        case ast.BoolOp(op=ast.Or(), values=[*_, last]) if last is not use:
+            return _defaulted(parent, parents)
+        case _:
+            return use
 
 
 def _any_length(annotation: ast.Subscript, source: str) -> bool:

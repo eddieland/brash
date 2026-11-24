@@ -227,7 +227,11 @@ The hook runs in an environment of its own, which holds brash and nothing of you
   call's arguments or in a list, tuple, or set display. `len`, `in`, a truth test, or more than one pass is
   `Collection`; indexing, slicing, or `reversed` of a list or a tuple is `Sequence`; a dict only read, `**p` among a
   call's arguments or in a dict display included, is `Mapping`; and a set tested with `in` is `AbstractSet`, never
-  `Collection`. It is deliberately narrow, since a wrong widening fails the type checker at a call site: it leaves
+  `Collection`. A parameter that may be `None`, `costs: list[float] | None`, keeps its `| None` and is read the
+  same way: `costs is None` needs nothing of it, and `costs or other` is read as `costs` is, so `sum(costs or [])`
+  gives `Iterable[float] | None`; one given its default by any other means, bound again or through a conditional
+  expression, is left alone, as is any other union. It is deliberately narrow, since a wrong widening fails the type
+  checker at a call site: it leaves
   alone a parameter used in any way it does not know to be a read (mutated, stored, returned, yielded, compared,
   unpacked by an assignment, or passed to any call but a few builtins whose names the module does not bind), so a
   tuple used as a tuple, hashed, used as a key, or concatenated, stays one, as does a tuple of a fixed length; it

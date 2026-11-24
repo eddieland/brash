@@ -712,6 +712,198 @@ def total(
     return sum(costs)
 ```
 
+### Optional
+
+```python
+def total(costs: list[float] | None) -> float:
+    return sum(costs or [])
+```
+
+```python
+from collections.abc import Iterable
+
+def total(costs: Iterable[float] | None) -> float:
+    return sum(costs or [])
+```
+
+### Optional, compared with None
+
+```python
+def total(costs: list[float] | None = None) -> float:
+    if costs is None:
+        return 0.0
+    return sum(costs)
+```
+
+```python
+from collections.abc import Iterable
+
+def total(costs: Iterable[float] | None = None) -> float:
+    if costs is None:
+        return 0.0
+    return sum(costs)
+```
+
+### Optional, tested for its truth
+
+```python
+def total(costs: list[float] | None) -> float:
+    if not costs:
+        return 0.0
+    return sum(costs)
+```
+
+```python
+from collections.abc import Collection
+
+def total(costs: Collection[float] | None) -> float:
+    if not costs:
+        return 0.0
+    return sum(costs)
+```
+
+### Optional, its default looped over
+
+```python
+def total(costs: list[float] | None) -> float:
+    result = 0.0
+    for cost in costs or ():
+        result += cost
+    return result
+```
+
+```python
+from collections.abc import Iterable
+
+def total(costs: Iterable[float] | None) -> float:
+    result = 0.0
+    for cost in costs or ():
+        result += cost
+    return result
+```
+
+### Optional, its default passed over twice
+
+```python
+def spread(costs: list[float] | None) -> float:
+    return max(costs or [0.0]) - min(costs or [0.0])
+```
+
+```python
+from collections.abc import Collection
+
+def spread(costs: Collection[float] | None) -> float:
+    return max(costs or [0.0]) - min(costs or [0.0])
+```
+
+### Optional, its default indexed
+
+```python
+def first(names: list[str] | None) -> str:
+    return (names or [""])[0]
+```
+
+```python
+from collections.abc import Sequence
+
+def first(names: Sequence[str] | None) -> str:
+    return (names or [""])[0]
+```
+
+### An optional dict
+
+```python
+def colour(row: dict[str, str] | None) -> str | None:
+    return (row or {}).get("colour")
+```
+
+```python
+from collections.abc import Mapping
+
+def colour(row: Mapping[str, str] | None) -> str | None:
+    return (row or {}).get("colour")
+```
+
+### An optional dict spread
+
+```python
+def show(row: dict[str, str] | None) -> None:
+    print({"x": "y", **(row or {})})
+```
+
+```python
+from collections.abc import Mapping
+
+def show(row: Mapping[str, str] | None) -> None:
+    print({"x": "y", **(row or {})})
+```
+
+### An optional set searched
+
+```python
+def known(name: str, names: set[str] | None = None) -> bool:
+    return names is not None and name in names
+```
+
+```python
+from collections.abc import Set as AbstractSet
+
+def known(name: str, names: AbstractSet[str] | None = None) -> bool:
+    return names is not None and name in names
+```
+
+### An optional tuple starred
+
+```python
+def run(args: tuple[str, ...] | None) -> None:
+    call("tox", *(args or ()))
+```
+
+```python
+from collections.abc import Iterable
+
+def run(args: Iterable[str] | None) -> None:
+    call("tox", *(args or ()))
+```
+
+### Optional with a default after another
+
+```python
+def total(costs: list[float] | None, more: list[float] | None) -> float:
+    return sum(costs or more or [])
+```
+
+```python
+from collections.abc import Iterable
+
+def total(costs: Iterable[float] | None, more: Iterable[float] | None) -> float:
+    return sum(costs or more or [])
+```
+
+### Optional, with a comment and over lines
+
+```python
+def total(
+    costs: (
+        list[float]  # in pounds
+        | None
+    ),
+) -> float:
+    return sum(costs or [])
+```
+
+```python
+from collections.abc import Iterable
+
+def total(
+    costs: (
+        Iterable[float]  # in pounds
+        | None
+    ),
+) -> float:
+    return sum(costs or [])
+```
+
 ## Left alone
 
 ### Mutated
@@ -925,10 +1117,142 @@ def total(costs: "list[float]") -> float:
     return sum(costs)
 ```
 
-### Optional
+### Optional the other way round
+
+```python
+def total(costs: None | list[float]) -> float:
+    return sum(costs or [])
+```
+
+### Optional as the typing module spells it
+
+```python
+from typing import Optional
+
+
+def total(costs: Optional[list[float]]) -> float:
+    return sum(costs or [])
+```
+
+### A union of two collections
+
+```python
+def total(costs: list[float] | set[float]) -> float:
+    return sum(costs)
+```
+
+### A union of three
+
+```python
+def total(costs: list[float] | int | None) -> float:
+    return sum(costs or [])
+```
+
+### Optional and quoted
+
+```python
+def total(costs: "list[float] | None") -> float:
+    return sum(costs or [])
+```
+
+### Optional and bound again
+
+```python
+def total(costs: list[float] | None = None) -> float:
+    if costs is None:
+        costs = []
+    return sum(costs)
+```
+
+### Optional and only compared with None
+
+```python
+def given(costs: list[float] | None) -> bool:
+    return costs is not None
+```
+
+### Optional through a conditional expression
 
 ```python
 def total(costs: list[float] | None) -> float:
+    return sum(costs if costs is not None else [])
+```
+
+### Optional and its default stored
+
+```python
+def total(costs: list[float] | None) -> float:
+    kept = costs or []
+    return sum(kept)
+```
+
+### Optional and its default returned
+
+```python
+def given(costs: list[float] | None) -> list[float]:
+    return costs or []
+```
+
+### Optional as the default of another
+
+```python
+def total(costs: list[float] | None, more: list[float]) -> float:
+    return sum(more or costs)
+```
+
+### Optional through an and
+
+```python
+def total(costs: list[float] | None) -> float:
+    return sum(costs and [1.0])
+```
+
+### Optional compared with None by ==
+
+```python
+def total(costs: list[float] | None) -> float:
+    if costs == None:
+        return 0.0
+    return sum(costs)
+```
+
+### Optional and returning the type it takes
+
+```python
+def unique(items: list[str] | None) -> list[str] | None:
+    return sorted(set(items or []))
+```
+
+### Optional and returning that type without its None
+
+```python
+def unique(items: list[str] | None) -> list[str]:
+    return sorted(set(items or []))
+```
+
+### Optional and its default given to a shadowed builtin
+
+```python
+from mylib import sorted
+
+
+def count(items: list[str] | None) -> int:
+    return len(sorted(items or []))
+```
+
+### Compared with None, and not optional
+
+```python
+def total(costs: list[float]) -> float:
+    if costs is None:
+        return 0.0
+    return sum(costs)
+```
+
+### A default by or, and not optional
+
+```python
+def total(costs: list[float]) -> float:
     return sum(costs or [])
 ```
 
@@ -1199,11 +1523,11 @@ def total(costs: tuple[(float, ...)]) -> float:
     return sum(costs)
 ```
 
-### A tuple quoted, and one optional
+### A tuple quoted
 
 ```python
-def total(costs: "tuple[float, ...]", more: tuple[float, ...] | None) -> float:
-    return sum(costs) + sum(more or ())
+def total(costs: "tuple[float, ...]") -> float:
+    return sum(costs)
 ```
 
 ### A tuple of a function named as a value
