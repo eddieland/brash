@@ -72,8 +72,10 @@ class Config(BaseModel):
 
     They run in brash's order whatever the list's, and `--only` on the command line is taken in place of it.
     """
+    extend_select: tuple[str, ...] = Field(default=(), alias="extend-select")
+    """The codemods that run as well, by name: added to those of `select`, or to those that run by default."""
     ignore: tuple[str, ...] = ()
-    """The codemods that do not run, by name: a blocklist, taken from `select` or from every codemod."""
+    """The codemods that do not run, by name: a blocklist, taken from those `select` and `extend-select` leave on."""
     target_version: Annotated[str, AfterValidator(_target)] | None = Field(default=None, alias="target-version")
     """The oldest Python the project's code runs on, as `py310` for 3.10. Every codemod runs, when it is not set.
 

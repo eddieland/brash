@@ -8,8 +8,8 @@ the name its command line takes, as the module that holds it and the class's nam
 
 The module is imported as any other is, from the environment brash runs in or from the directory that holds that
 file, so a project's codemod need not be installed. The class is a `command.Command`. A project's codemods
-run after brash's own, in the order the table gives them. `config` reads the table, and its `select` and `ignore` there
-say which of them all a run leaves out.
+run after brash's own, in the order the table gives them. `config` reads the table, and its `select`, `extend-select`
+and `ignore` there say which of them all a run leaves out.
 """
 
 from __future__ import annotations
@@ -69,26 +69,29 @@ def registered(project: Project) -> dict[str, type[Command]]:
 
 
 def selected(project: Project, codemods: Collection[str]) -> list[str]:
-    """The codemods a run in a project runs by default: those its `select` names, or all, but for its `ignore`.
+    """The codemods a run in a project runs by default.
+
+    They are those its `select` names, or all, and those its `extend-select` names, but for its `ignore`.
 
     Args:
-        project: The project, whose configuration may hold either list.
+        project: The project, whose configuration may hold any of the three lists.
         codemods: Every codemod the run has by name, in the order they run on a file.
 
     Returns:
         The names, in that order.
 
     Raises:
-        RegistryError: When either list names no codemod.
+        RegistryError: When a list names no codemod.
     """
-    select, ignore = project.config.select, project.config.ignore
-    for setting, names in (("select", select or ()), ("ignore", ignore)):
+    select, extend, ignore = project.config.select, project.config.extend_select, project.config.ignore
+    for setting, names in (("select", select or ()), ("extend-select", extend), ("ignore", ignore)):
         for name in names:
             if name not in codemods:
                 there = ", ".join(f"`{known}`" for known in codemods)
                 where = project.setting(setting)
                 raise RegistryError(f"{where}: `{name}` is not a codemod; there are {there}")
-    return [name for name in codemods if (select is None or name in select) and name not in ignore]
+    chosen = codemods if select is None else {*select, *extend}
+    return [name for name in codemods if name in chosen and name not in ignore]
 
 
 def _load(where: str, entry: str) -> type[Command]:
