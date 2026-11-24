@@ -3,7 +3,8 @@
 As of 2026-11-24.
 
 Three ideas are worth building, each in a narrowed form: `empty-collections`, `explicit-override`, and star-unpacking
-plus `tuple[X, ...]` in `general-params`. Fourteen ideas are shelved, 24 are untested, and three defects turned up in
+plus `tuple[X, ...]` in `general-params`. Two more are sound as opt-in codemods, for a project that holds the
+convention. Twelve ideas are shelved, 24 are untested, and three defects turned up in
 the codemods brash already has.
 
 ## How to use this document
@@ -14,6 +15,7 @@ fill what is known, and give it the status Untested.
 | Status | Meaning |
 | --- | --- |
 | Build | Tested on real code and worth implementing in the form the entry describes |
+| Opt-in | Sound for a project that holds the convention, which most do not; build it to run only where selected |
 | Rider | Sound and small, but too rare to justify on its own; build with its parent or not at all |
 | Shelved | Tested and not worth building; the entry says what would reopen it |
 | Untested | A written idea with no evidence yet |
@@ -61,21 +63,37 @@ something the rules do not name. The ones that survived share four traits:
   return type, a constant's type or a docstring is not.
 - **A table of known reads decides it.** As `general-params` does: list the uses that are provably safe and leave alone
   any other.
-- **It fires often enough.** Below about 1.5 sites per 100 files, maintainers rarely see it run and the cases cost more
-  than they return.
+- **It fires often enough where it is wanted.** Below about 1.5 sites per 100 files, in the projects that hold the
+  convention, maintainers rarely see it run and the cases cost more than they return.
+
+### Default-on and opt-in
+
+How many projects hold a convention is not part of the bar. A project turns a codemod off with `ignore` and names the
+ones it wants with `select`, so a codemod that suits one project in ten is still worth having. The question for such an
+idea is which way it defaults, not whether it exists.
+
+An earlier version of this document shelved ideas because they "fire where they are not wanted". That was a mistake, and
+two ideas moved to Opt-in when it was corrected. Two things still disqualify an idea, and neither is fixed by a
+switch:
+
+- It is wrong at some sites in a project that does want the convention, with no rule to tell which.
+- It breaks something in a module it cannot see.
+
+**Open decision.** Every codemod runs by default today, and `select` and `ignore` only narrow that. An opt-in codemod
+needs a mechanism: a codemod marked off unless named in `select` or in a new `extend-select`. That changes what
+`[tool.brash]` means, so it is a change other projects rely on.
 
 ### How ideas failed
 
-| Failure | Example |
-| --- | --- |
-| The rewrite overrides a deliberate choice | `sorted-sets` reordered sets whose order meant something in 12 of 64 samples |
-| Another module can see it | `object-params` drew 13 new errors at callers |
-| A type checker reacts to the edit itself | pyrefly retypes unannotated parameters once `@override` is present; mypy starts checking a body at its first annotation |
-| It fires where the convention is not wanted | 92% of `docstring-types` rewrites landed in three projects that type docstrings on purpose |
-| The provable form is too rare | `frozen-constants` rewrote 9 sites in 7,436 files |
-| ruff is already most of the way there | ruff's own fix does 81% of `single-with` at 120 columns |
-| It is a migration | `type-params` fires zero times on a codebase that has converted |
-| A person must choose | `raise-from`: `from e` or `from None` |
+| Failure                                          | Example                                                                                                                 |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| The rewrite overrides a choice made at that site | `sorted-sets` reordered sets whose order meant something in 12 of 64 samples                                            |
+| Another module can see it                        | `object-params` drew 13 new errors at callers                                                                           |
+| A type checker reacts to the edit itself         | pyrefly retypes unannotated parameters once `@override` is present; mypy starts checking a body at its first annotation |
+| The provable form is too rare                    | `frozen-constants` rewrote 9 sites in 7,436 files                                                                       |
+| ruff is already most of the way there            | ruff's own fix does 81% of `single-with` at 120 columns                                                                 |
+| It is a migration                                | `type-params` fires zero times on a codebase that has converted                                                         |
+| A person must choose                             | `raise-from`: `from e` or `from None`                                                                                   |
 
 One more pattern holds for every survivor: it writes the provable fraction of a convention, not the whole of it. A
 passing `brash --check` then says less than it seems to.
@@ -83,7 +101,8 @@ passing `brash --check` then says less than it seems to.
 ## Index
 
 One row per idea. "Kind" is New for a new codemod, or the name of the existing codemod it extends. Rejected classes of
-ideas are listed in their own section.
+ideas are listed in their own section. A deciding fact of "taste" or "contested" on an untested idea argues against
+running it by default, not against building it as opt-in.
 
 | Idea | Kind | Status | What it does | Deciding fact |
 | --- | --- | --- | --- | --- |
@@ -97,14 +116,14 @@ ideas are listed in their own section.
 | `self-returns` | New | Shelved | `-> Self` on a method that returns `self` | 8 wrong sites; 3 new mypy errors in jinja2 |
 | `frozen-constants` | New | Shelved | List or set constant to tuple or frozenset | 9 sites in 7,436 files |
 | `raise-from` | New | Shelved | Adds `from e` to a `raise` in a handler | 29 of 59 right; a person must choose |
-| `newspaper-order` | New | Shelved | Moves a private helper below its first caller | Broke an import; 20 of 40 right narrowed |
-| `method-order` | New | Shelved | The same, for methods in a class | Ruled out with `newspaper-order` |
+| `newspaper-order` | New | Shelved | Moves a private helper below its first caller | Safe form leaves 49 of 178 files in mixed order; 11 of 20 right |
+| `method-order` | New | Shelved | The same, for methods in a class | Not run on its own; falls with `newspaper-order` |
 | `typed-fixtures` | New | Shelved | Annotates test parameters from fixtures | New type errors at 23 of 150 sites |
 | `type-params` | New | Shelved | `TypeVar` to PEP 695 syntax | A one-off migration; a type error in cattrs |
 | `object-params` | New | Shelved | `Any` to `object` on a parameter only inspected | 13 new errors at callers |
-| `docstring-types` | New | Shelved | Drops a docstring type that repeats the annotation | 92% of sites in projects that want the types |
+| `docstring-types` | New | Opt-in | Drops a docstring type that repeats the annotation | 0 wrong of 49; 16 of 16 right in projects that hold the convention |
 | `dunder-signatures` | New | Shelved | Annotates `__exit__`, `__hash__` and the like | 9 of 59 wrong, 39 debatable |
-| Narrower `Sequence` and `Collection` | `general-params` | Shelved | `Sequence[X]` to `Iterable[X]` where reads allow | 28 of 34 right; orphans an import in 31 of 66 files |
+| Narrower `Sequence` and `Collection` | `general-params` | Opt-in | `Sequence[X]` to `Iterable[X]` where reads allow | The AGENTS.md rule; finds 2 parameters in brash; orphans an import in 31 of 66 files |
 | `#:` above `self.x` in `__init__` | `doc-comments` | Shelved | Doc comment for an instance attribute | 23 of 45 comments say what the attribute is |
 | `section-order` | New | Untested | Google docstring sections in the guide's order | Rate measured only: 1.29 docstrings per 100 files |
 | `returns-none` | New | Untested | Removes a Returns section that says `None` | Rate only: all 104 hits in litestar |
@@ -248,14 +267,14 @@ It adds `from typing import override` when the module does not have it.
 - It clears 13.5% of basedpyright's missing-override reports, 14.6% of pyrefly's and 23.2% of mypy's. It clears none of
   brash's own 29, whose bases are in LibCST.
 - 76 of the 120 files it rewrites still hold an unmarked override afterwards.
-- Only 3 of the 30 projects use `@override` at all, so on by default it starts a convention most projects do not hold.
+- Only 3 of the 30 projects use `@override` at all. That argues for opt-in, not against building it.
 - A module that star-imports a rewritten one gains the name `override`. Every codemod that adds an import shares this.
 - The corpus test suites were not run, so run-time safety rests on the decorator's source and three checkers agreeing.
 
 **Size.** About 320 lines.
 
-**Open decisions.** Whether a codemod that cannot fire on brash's own code is worth carrying. Whether it should be on by
-default.
+**Open decisions.** Whether a codemod that cannot fire on brash's own code is worth carrying. Whether it runs by default
+or is opt-in.
 
 ### general-params: star-unpacking and tuple\[X, ...\]
 
@@ -367,9 +386,80 @@ rewrite as left alone.
 
 **Reopen if** the star-unpacking extension is built and the pinned case is judged a matter of spelling, not intent.
 
+## Opt-in
+
+Two ideas are sound for a project that holds the convention and would be noise in one that does not. Each should be
+built to run only where a project selects it. Both wait on the open decision under "Default-on and opt-in".
+
+### general-params: narrower Sequence and Collection
+
+**Motivation.** The AGENTS.md rule applied to a parameter that is already abstract: `Sequence[X]` that is only iterated
+needs only `Iterable[X]`. It is the only idea here that fires on brash's own code.
+
+**Rewrite.** `def _with_imports(block, names: Sequence[str])`, whose body is one comprehension over `names`, becomes
+`names: Iterable[str]`.
+
+**Leaves alone.** Everything `general-params` leaves alone today. A parameter whose reads need what it already says:
+indexing, slicing, `reversed`, `.index` or `.count` of a Sequence; `len`, `in`, a truth test or two passes of a
+Collection. A dotted head such as `t.Sequence`. `AbstractSet`, `Mapping` and the mutable types.
+
+**Evidence.**
+
+- 99 sites in 66 files: 52 in public functions, 29 in private ones, 18 in tests.
+- 28 of 34 sampled rewrites were right. The 6 misses replace `Sequence` where order, an index or a public contract was
+  the point, such as a command line that would then accept a set.
+- No new type errors from pyrefly or mypy on six projects.
+- Both of brash's own hits are right by its rule; see the defects section.
+
+**Limitations.**
+
+- Authors use `Sequence` to mean "a read-only list": of 128 plain `Sequence` parameters with only known reads, 20 need
+  one. A project that opts in is choosing to give that meaning up.
+- It leaves an unused import in 31 of the 66 files, which ruff's F401 and basedpyright then report and `make fmt` does
+  not remove. It needs to remove the import it orphans, and no brash codemod removes one today.
+- `Sequence` to `Collection` drops "ordered", and nothing in the syntax says when order mattered.
+
+**Size.** An extension of `general_params.py`, behind its own name so it can be selected apart from the parent.
+
+**Open decisions.** Whether it is a separate codemod or a setting of `general-params`. Whether brash removes an import
+it orphans.
+
+### docstring-types
+
+**Motivation.** A Google docstring that writes `name (str): ...` beside an annotated parameter repeats the annotation,
+and the two drift apart. Projects divide cleanly: textual, litestar and pydantic type 0.2% to 2% of entries, while rich
+types 95%, nox 80% and trio 71% on purpose.
+
+**Rewrite.** `name (str): The name.` becomes `name: The name.` where the parenthesised type matches the parameter's
+annotation exactly.
+
+**Leaves alone.** A type that differs from the annotation in any way, an unannotated parameter, and class docstrings.
+
+**Evidence.**
+
+- 661 lines in 78 files. Every output parses, nothing but docstrings differs, and a second run changes nothing.
+- The three type checkers give identical diagnostics before and after.
+- 32 of 49 sampled rewrites were right, 17 debatable, none wrong. All 16 from the three projects that hold the
+  convention were right.
+- In those three projects it gives 51 sites in 1,665 files.
+
+**Limitations.**
+
+- A docstring is a run-time value. A click help text, a schema built from docstring types and a strict Sphinx build
+  each broke in a second module in constructed cases. None was found in the corpus.
+- The exact-match rule leaves a docstring half typed where some entries differ from their annotations. Converting only
+  whole docstrings fixes that and lowers the count.
+- pydoclint's default demands the opposite convention, so a project cannot run both.
+- It needs a Google docstring parser, which brash does not have.
+
+**Size.** About 300 lines with the parser.
+
+**Open decisions.** Whether brash may edit `__doc__` at all; see the docstring family under Untested, which would share
+the parser.
+
 ## Shelved
 
-Fourteen ideas were tested or ruled out by a test and are not worth building as they stand. Each entry records why, so
+Twelve ideas were tested or ruled out by a test and are not worth building as they stand. Each entry records why, so
 the same ground is not covered twice. The "reopen if" lines are suggestions drawn from the evidence, not tested claims.
 
 ### sorted-sets
@@ -392,8 +482,7 @@ changes when `PYTHONHASHSEED` is pinned. Confidence 0.85.
 **Evidence.** The rewrite is sound: 0 wrong of 50 sampled. But ruff's own fix already does 81% of sites at line length
 120 and 40% at 88, leaving 90 pairs in 42 files. A trailing `# type: ignore` on the inner header moves after formatting.
 
-**Why shelved.** ruff has an open issue (#23040) to lift the guard that stops its fix, and pytest, trio and anyio switch
-SIM117 off. Confidence 0.7.
+**Why shelved.** ruff has an open issue (#23040) to lift the guard that stops its fix. Confidence 0.7.
 
 **Reopen if** ruff closes that issue without lifting the guard.
 
@@ -437,17 +526,22 @@ named handler, they chose `from None` in 84 of 491 cases. `__cause__` is observa
 
 ### newspaper-order and method-order
 
-**Motivation.** AGENTS.md puts each private helper below the first function that calls it.
+**Motivation.** AGENTS.md puts each private helper below the first function that calls it. Few projects hold this: 43%
+of corpus helpers already sit below a caller. That alone would make it an opt-in codemod, not a shelved one.
 
-**Evidence.** As specified it broke the import of `pygments.lexers.configs`, where a helper is used at import time. A
-narrowed safe form gives 345 sites in 178 files, of which 20 of 40 sampled were plainly right. It restores brash's own
-layout for 12 of 42 helpers. Only 43% of corpus helpers already sit below a caller.
+**Evidence.** As first specified it broke the import of `pygments.lexers.configs`, where a helper is used at import
+time. The form that survived moves a helper only below an undecorated top-level caller, with nothing but defs, classes
+and literal assignments in between. That gives 345 sites in 178 files and is about 420 lines. Of the 20 sampled sites
+that pass the safety rules, 9 were not plainly right. 49 of the 178 changed files end in mixed order, a moved helper
+beside ones that must stay. In a strip test it restores brash's own layout for 12 of 42 helpers, and on brash as it
+stands it fires nowhere.
 
-**Why shelved.** Most projects do not hold the convention, half the moves are not clear improvements, and every move
-costs a wide diff and lost blame. `method-order`, the same rule inside a class, falls with it and is stated nowhere.
-Confidence 0.85.
+**Why shelved.** The safety rules leave so much alone that it cannot hold the convention even where a project wants
+it: a quarter of the files it touches stay out of order, and every move costs a wide diff and lost blame.
+`method-order`,
+the same rule inside a class, was not run on its own. Confidence 0.85.
 
-**Reopen if** it is wanted as brash's own project codemod.
+**Reopen if** a project that holds the convention grades the sample against its own rule and finds the moves right.
 
 ### typed-fixtures
 
@@ -489,26 +583,9 @@ changed which function was called. With every decidable exclusion it is 66 sites
 errors.
 
 **Why shelved.** Unlike widening a collection, moving a parameter off `Any` is visible to callers, and nothing in the
-module predicts it. It clears 1.3% of ANN401 reports. Projects strict enough to select every ruff rule switch ANN401 off
-by name. Confidence 0.85.
+module predicts it. It clears 1.3% of ANN401 reports. Confidence 0.85.
 
 **Reopen if** pyright stops exempting `Any` parameters from that check.
-
-### docstring-types
-
-**Motivation.** A Google docstring that writes `name (str): ...` beside an annotated parameter repeats the annotation,
-and the two drift apart.
-
-**Evidence.** 661 lines in 78 files, mechanically clean and idempotent. 610 of the 661 are in rich, nox and trio, which
-type their docstrings on purpose. There 42% of sites sit in a docstring that still holds a type afterwards. The projects
-that hold the convention give 51 sites in 1,665 files. A click help text, a schema built from docstring types and a
-strict Sphinx build each broke in a second module. pydoclint's default demands the opposite. Sampled: 32 of 49 right, 17
-debatable, 0 wrong.
-
-**Why shelved.** It fires where it is not wanted and is idle where it is. It would also be brash's first edit to a
-run-time value, `__doc__`. Confidence 0.75.
-
-**Reopen if** brash decides it may edit docstrings; see the docstring family under Untested.
 
 ### dunder-signatures
 
@@ -525,21 +602,6 @@ annotation. Confidence 0.86.
 
 **Reopen if** brash gains a way to run on new code only, or a corpus of half-typed applications shows the annotated form
 firing often.
-
-### general-params: narrower Sequence and Collection
-
-**Motivation.** The AGENTS.md rule applied to a parameter already abstract: `Sequence[X]` that is only iterated needs
-only `Iterable[X]`.
-
-**Evidence.** 99 sites in 66 files; 28 of 34 sampled right. The misses replace `Sequence` where order, an index or a
-public contract was the point, such as a command line that would now accept a set. It leaves an unused import in 31 of
-the 66 files, which `make fmt` does not remove. No type-checker break in six projects.
-
-**Why shelved.** With `list[X]` the author took the default. With `Sequence[X]` they chose, and one rewrite in six
-overrides that choice.
-
-**Reopen if** it is wanted as brash's own project codemod or behind a switch. It is the only idea that fires on brash's
-own code; see the defects section.
 
 ### doc-comments: `#:` above `self.x` in `__init__`
 
@@ -580,12 +642,15 @@ documentation builds read.
 
 ### Lower-tier ideas
 
-The other twenty were ranked lowest at ideation and have not been prototyped. Three notes for whoever picks one up:
+The other twenty were ranked lowest at ideation and have not been prototyped. Many were ranked low as "taste" or
+"contested", which is an argument about defaults: `strenum-values`, `match-chains`, `param-ids`, `patch-blocks`,
+`positive-conditions`, `named-expressions` and `attribute-docstrings` could each be an opt-in codemod if the rewrite
+proves sound. Three notes for whoever picks one up:
 
 - `todo-colons` was called the safest and smallest of all the ideas: it respells a comment tag, and ruff's TD004 and
   TD007 report it with no fix.
-- `mock-namespace` and `lazy-logging` are named in the README as examples of a project's own codemod, so the maintainers
-  have already classified them.
+- `mock-namespace` and `lazy-logging` are named in the README as examples of a project's own codemod. With opt-in
+  codemods they could ship in brash instead; that is the maintainers' call.
 - `concrete-returns`, `never-returns`, `keyword-flags` and `final-classes` each change something another module can see.
   That is the trait that sank `self-returns` and `object-params`.
 

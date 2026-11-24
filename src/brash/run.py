@@ -60,6 +60,7 @@ def rewrite_all(
     paths: Iterable[Path],
     names: Sequence[str],
     codemods: Mapping[str, type[Command]] = CODEMODS,
+    ignored: Mapping[Path, Collection[str]] | None = None,
 ) -> list[Rewrite]:
     """Run the codemods named over every Python file under `paths`, changing none.
 
@@ -67,15 +68,19 @@ def rewrite_all(
         paths: Files, taken as Python whatever their names, and directories, searched for it.
         names: The codemods to run, of `codemods`, in order.
         codemods: Each codemod there is by name: brash's own, unless a project's are given with them.
+        ignored: The codemods of `names` that do not run on a file, by the file's path as `files` gives it. Every
+            one of them runs on a file that is not there.
 
     Returns:
         A rewrite for each file, in the files' order.
     """
     found = files(paths)
+    off = ignored or {}
+    each = [[name for name in names if name not in off[path]] if path in off else names for path in found]
     if len(found) < _SERIAL:
-        return [rewrite_file(path, names, codemods) for path in found]
+        return [rewrite_file(path, chosen, codemods) for path, chosen in zip(found, each, strict=True)]
     with ProcessPoolExecutor() as pool:
-        return list(pool.map(rewrite_file, found, [names] * len(found), [codemods] * len(found), chunksize=16))
+        return list(pool.map(rewrite_file, found, each, [codemods] * len(found), chunksize=16))
 
 
 def files(paths: Iterable[Path]) -> list[Path]:

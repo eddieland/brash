@@ -18,7 +18,7 @@ from brash.config import ConfigError
 from brash.registry import CODEMODS, RegistryError
 
 #: Every setting there is, as the message about one there is not lists them.
-SETTINGS: Final = "`codemods`, `select`, `extend-select`, `ignore`, `target-version`, `exclude`"
+SETTINGS: Final = "`codemods`, `select`, `extend-select`, `ignore`, `per-file-ignores`, `target-version`, `exclude`"
 
 #: A project's codemod, which renames the constant `OLD`, and so runs on what `final-constants` wrote.
 LOCAL: Final = '''\
@@ -216,6 +216,16 @@ def test_an_entry_that_names_no_codemod_fails_the_run_and_says_which(project: Pa
             "[tool.brash]\nexclude = ['build', 3]\n",
             "tool.brash.exclude.1: Input should be a valid string",
             id="a pattern that is no string",
+        ),
+        pytest.param(
+            "[tool.brash]\nper-file-ignores = ['tests/*']\n",
+            "tool.brash.per-file-ignores: Input should be a valid dictionary",
+            id="patterns with no codemods",
+        ),
+        pytest.param(
+            "[tool.brash.per-file-ignores]\n'tests/*' = 'rename'\n",
+            "tool.brash.per-file-ignores.tests/*: Input should be a valid tuple",
+            id="one codemod, not a list",
         ),
     ],
 )
@@ -436,6 +446,57 @@ def test_a_choice_of_a_codemod_there_is_not_fails_the_run_and_names_those_there_
     assert code == 1
     assert f"pyproject.toml: tool.brash.{setting}: `final-constant` is not a codemod; there are " in output
     assert "`general-params`, `rename`" in output
+    assert stale.read_text() == BEFORE
+
+
+def test_per_file_ignores_turn_a_codemod_off_for_the_files_a_pattern_matches_and_no_other(project: Path) -> None:
+    configure(
+        project,
+        CONFIGURED + "[tool.brash.per-file-ignores]\n'tests/' = ['rename']\n'*_old.py' = ['final-constants']\n",
+    )
+    renamed, final = "NEW = 3\n", "from typing import Final\n\nOLD: Final = 3\n"
+    expected = {"tests/deep/a.py": final, "pkg/b_old.py": renamed, "tests/c_old.py": BEFORE, "pkg/d.py": AFTER}
+    for name in expected:
+        (project / name).parent.mkdir(parents=True, exist_ok=True)
+        (project / name).write_text(BEFORE)
+
+    code, output = invoke(".", "tests/c_old.py")
+
+    assert code == 0
+    assert output == "Rewrote pkg/b_old.py\nRewrote pkg/d.py\nRewrote tests/deep/a.py\n"
+    assert {name: (project / name).read_text() for name in expected} == expected
+
+
+def test_per_file_ignores_hold_over_many_files_for_a_codemod_only_names_and_not_outside_the_project(
+    project: Path,
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    configure(project, CONFIGURED + "[tool.brash.per-file-ignores]\n'tests/*' = ['rename']\n")
+    (project / "tests").mkdir()
+    for number in range(20):
+        (project / "tests" / f"m{number}.py").write_text(BEFORE)
+    outside = tmp_path_factory.mktemp("outside") / "tests" / "m.py"
+    outside.parent.mkdir()
+    outside.write_text(BEFORE)
+
+    with contextlib.chdir(project / "tests"):
+        code, output = invoke("--only", "rename", ".", outside)
+
+    assert (code, output) == (0, f"Rewrote {outside}\n")
+    assert {path.read_text() for path in (project / "tests").iterdir()} == {BEFORE}
+
+
+def test_a_per_file_ignore_of_a_codemod_there_is_not_fails_the_run_at_its_pattern(project: Path) -> None:
+    configure(project, CONFIGURED + "[tool.brash.per-file-ignores]\n'tests/*' = ['final-constant']\n")
+    stale = project / "stale.py"
+    stale.write_text(BEFORE)
+
+    code, output = invoke(".")
+
+    assert code == 1
+    assert (
+        "pyproject.toml: tool.brash.per-file-ignores.tests/*: `final-constant` is not a codemod; there are " in output
+    )
     assert stale.read_text() == BEFORE
 
 

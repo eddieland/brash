@@ -5,6 +5,9 @@
     ignore = ["general-params"]
     exclude = ["src/app/_generated", "*_pb2.py"]
 
+    [tool.brash.per-file-ignores]
+    "tests/*" = ["general-params"]
+
     [tool.brash.codemods]
     vocab-members = "codemods.vocab_members:VocabMembers"
 
@@ -13,6 +16,9 @@ A `brash.toml` holds the same settings at its top level, with no `[tool.brash]` 
     target-version = "py310"
     ignore = ["general-params"]
     exclude = ["src/app/_generated", "*_pb2.py"]
+
+    [per-file-ignores]
+    "tests/*" = ["general-params"]
 
     [codemods]
     vocab-members = "codemods.vocab_members:VocabMembers"
@@ -76,6 +82,12 @@ class Config(BaseModel):
     """The codemods that run as well, by name: added to those of `select`, or to those that run by default."""
     ignore: tuple[str, ...] = ()
     """The codemods that do not run, by name: a blocklist, taken from those `select` and `extend-select` leave on."""
+    per_file_ignores: Mapping[str, tuple[str, ...]] = Field(default_factory=dict, alias="per-file-ignores")
+    """The codemods that do not run on some files, by name, under a glob pattern of the files' paths.
+
+    A pattern is one of `exclude`'s, and matches what it would. A file that several match is rewritten by none of
+    the codemods any of them names, and `--only` on the command line does not run one on such a file.
+    """
     target_version: Annotated[str, AfterValidator(_target)] | None = Field(default=None, alias="target-version")
     """The oldest Python the project's code runs on, as `py310` for 3.10. Every codemod runs, when it is not set.
 
@@ -114,15 +126,34 @@ class Project:
         Returns:
             True for a file under the project's directory that a pattern matches, itself or a directory above it.
         """
-        if self.root is None or not self.config.exclude:
-            return False
+        candidates = self._candidates(path) if self.config.exclude else ()
+        return any(_matches(candidates, pattern) for pattern in self.config.exclude)
+
+    def ignored(self, path: Path) -> frozenset[str]:
+        """The codemods the project's `per-file-ignores` keeps off the file at `path`.
+
+        Returns:
+            Their names: those under each pattern that matches the file, itself or a directory above it, and none
+            for a file outside the project's directory.
+        """
+        table = self.config.per_file_ignores
+        candidates = self._candidates(path) if table else ()
+        return frozenset(name for pattern, names in table.items() if _matches(candidates, pattern) for name in names)
+
+    def _candidates(self, path: Path) -> list[str]:
+        """What a pattern is matched against for the file at `path`.
+
+        Returns:
+            The file's path relative to the project's directory, then each directory above it there, or nothing for
+            a file that is not under it.
+        """
+        if self.root is None:
+            return []
         try:
             relative = path.resolve().relative_to(self.root)
         except ValueError:
-            return False
-        candidates = [relative.as_posix(), *(parent.as_posix() for parent in relative.parents[:-1])]
-        patterns = [pattern.rstrip("/") for pattern in self.config.exclude]
-        return any(fnmatchcase(candidate, pattern) for candidate in candidates for pattern in patterns)
+            return []
+        return [relative.as_posix(), *(parent.as_posix() for parent in relative.parents[:-1])]
 
 
 class ConfigError(Exception):
@@ -169,6 +200,10 @@ def python(target: str) -> tuple[int, int]:
     if match is None:
         raise ValueError(f"`{target}` is not a Python version such as `py310`")
     return 3, int(match[1])
+
+
+def _matches(candidates: Iterable[str], pattern: str) -> bool:
+    return any(fnmatchcase(candidate, pattern.rstrip("/")) for candidate in candidates)
 
 
 def _table(document: Mapping[str, object], file: str) -> object:
