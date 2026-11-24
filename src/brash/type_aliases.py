@@ -4,8 +4,9 @@ ruff rewrites an alias annotated `TypeAlias` (UP040), but a bare `Name = <type e
 other to it. Here `Outcome = Literal["packed", "skipped"]` becomes `type Outcome = Literal["packed", "skipped"]`.
 
 An alias is a `CamelCase` name bound once, by an assignment among the module's own statements, to a `Literal`, a
-`tuple`, a `Callable`, or a union of types, spelled `A | B`, `Union[A, B]`, or `Optional[A]`. ruff reports the last
-two (UP007, UP045) and fixes neither in an assignment; in a `type` statement it writes the `|`.
+generic type of the standard library (`tuple[str, int]`, `dict[str, Row]`, `Callable[[str], Reply]`, `Sequence[Row]`,
+by the names in `GENERICS`), or a union of types, spelled `A | B`, `Union[A, B]`, or `Optional[A]`. ruff reports the
+last two (UP007, UP045) and fixes neither in an assignment; in a `type` statement it writes the `|`.
 
 A `type` statement makes a `TypeAliasType`, which is not the type it names when the program runs, so the rewrite is
 kept to where that cannot show. It leaves alone:
@@ -13,8 +14,8 @@ kept to where that cannot show. It leaves alone:
 - a name the module reads outside an annotation: passed to `get_args`, `isinstance`, or any other call, subscripted,
   called, subclassed, or assigned to another name. A read inside another alias this codemod rewrites, or inside a
   `type` statement, is not one, since neither is evaluated until asked for;
-- an `Annotated[...]` alias, whose metadata frameworks read at run time, and any other subscript (`dict[str, int]`),
-  which may be a class the module calls;
+- an `Annotated[...]` alias, whose metadata frameworks read at run time, and a subscript of anything else that is
+  not the standard library's (`Table[Row]`, `np.ndarray[int]`), which may be no type at all;
 - a union that may be arithmetic on values: one with no `None`, no subscript, and no builtin type among its members;
 - a `Union[...]` of one member, which is that member and no union;
 - an alias with a quoted name as a member of a `Union[...]` or `Optional[...]`, at any depth. ruff's fix for those
@@ -46,8 +47,21 @@ from brash.final_constants import CONSTANT, DECLARES, Bindings, last_name
 
 #: What the text of a module with an alias to rewrite must hold: a capitalised name assigned at the margin.
 ASSIGNED: Final = re.compile(r"^_*[A-Z]\w*[ \t]*=[^=]", re.MULTILINE)
-#: The subscripts taken as an alias whatever they hold, by the last name of what is subscripted.
-HEADS: Final = frozenset({"Callable", "Literal", "tuple"})
+#: The standard library's generic types, by the name each is subscripted under: the builtins and those of
+#: `collections`, then of `collections.abc`, `contextlib` and `re`, then the names `typing` has for them.
+GENERICS: Final = (
+    frozenset({"dict", "frozenset", "list", "set", "tuple", "type"})
+    | frozenset({"ChainMap", "Counter", "OrderedDict", "defaultdict", "deque"})
+    | frozenset({"AsyncGenerator", "AsyncIterable", "AsyncIterator", "Awaitable", "Callable", "Collection"})
+    | frozenset({"Container", "Coroutine", "Generator", "ItemsView", "Iterable", "Iterator", "KeysView", "Mapping"})
+    | frozenset({"MutableMapping", "MutableSequence", "MutableSet", "Reversible", "Sequence", "Set", "ValuesView"})
+    | frozenset({"AbstractAsyncContextManager", "AbstractContextManager", "Match", "Pattern"})
+    | frozenset({"AbstractSet", "AsyncContextManager", "ContextManager", "DefaultDict", "Deque", "Dict", "FrozenSet"})
+    | frozenset({"List", "Tuple", "Type"})
+)
+#: The subscripts taken as an alias, by the last name of what is subscripted: a `Literal` whatever it holds, and a
+#: generic type of the standard library that holds types.
+HEADS: Final = GENERICS | {"Literal"}
 #: The subscripts ruff spells as a `|` union (UP007 and UP045), by the last name of what is subscripted.
 UNIONS: Final = frozenset({"Optional", "Union"})
 #: The builtin types whose presence in a union says it is a union of types, not arithmetic on values.
@@ -227,7 +241,7 @@ def _is_alias(name: str, value: ast.expr) -> bool:
     """Whether an assignment reads as a type alias this codemod rewrites.
 
     Returns:
-        True for a `CamelCase` name given a `Literal`, `tuple`, or `Callable`, or a union that is one of types,
+        True for a `CamelCase` name given a `Literal`, a standard generic type, or a union that is one of types,
         spelled with `|`, `Union[...]`, or `Optional[...]`.
     """
     if not name.lstrip("_")[:1].isupper() or CONSTANT.fullmatch(name) or _quotes_a_union_member(value):

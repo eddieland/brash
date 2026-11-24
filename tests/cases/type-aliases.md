@@ -55,6 +55,50 @@ Endpoint = Callable[[str], 'Reply']
 type Endpoint = Callable[[str], 'Reply']
 ```
 
+### Builtin generic
+
+```python
+Index = dict[str, int]
+Rows = list[Row]
+Names = frozenset[str]
+Kind = type[Row]
+```
+
+```python
+type Index = dict[str, int]
+type Rows = list[Row]
+type Names = frozenset[str]
+type Kind = type[Row]
+```
+
+### Generic of the standard library
+
+```python
+Lookup = Mapping[str, "Row"]
+Stream = collections.abc.AsyncIterator[bytes]
+Groups = defaultdict[str, list[Row]]
+Found = re.Match[str]
+```
+
+```python
+type Lookup = Mapping[str, "Row"]
+type Stream = collections.abc.AsyncIterator[bytes]
+type Groups = defaultdict[str, list[Row]]
+type Found = re.Match[str]
+```
+
+### Generic under its typing name
+
+```python
+Index = Dict[str, List[int]]
+Pair = typing.Tuple[str, int]
+```
+
+```python
+type Index = Dict[str, List[int]]
+type Pair = typing.Tuple[str, int]
+```
+
 ### Union of builtins
 
 ```python
@@ -312,8 +356,28 @@ Dep = Annotated[Options, Depends(options)]
 ### Another subscript
 
 ```python
+Rows = Table[Row]
+Grid = np.ndarray[int]
+Cell = sheet.cells["Cell"]
+```
+
+### Standard generic that holds no type
+
+```python
+First = list[0]
+Width = dict[str, 1 + 2]
+```
+
+### Standard generic read at run time
+
+```python
 Index = dict[str, int]
 Rows = list[Row]
+EMPTY = Index()
+
+
+def f(x: object) -> Rows:
+    return cast(Rows, x)
 ```
 
 ### Union that may be of values

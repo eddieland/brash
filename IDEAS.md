@@ -923,11 +923,25 @@ The scout that found the two extensions above also measured these and dropped th
 | `general-params` | Decorated functions | 189 parameters, 160 under `click.option`; right as it is |
 | `general-params` | Bare `list` or `dict`, quoted annotations, `@final` classes | At most 22, 4 and 8 sites |
 | `type-aliases` | A generic alias over a module `TypeVar` | 22 sites, and it leaves the `TypeVar` behind |
-| `type-aliases` | Other subscripts read only in annotations | 48 sites; pinned by "Another subscript" |
+| `type-aliases` | Other subscripts read only in annotations | 48 sites; pinned by "Another subscript". Built since for the standard library's generic types, at the maintainer's ask: see below |
 | `final-constants` | Names under `if`, `try` or `TYPE_CHECKING` | 139 names, 9 eligible; the rest are bound in two arms |
 | `final-constants` | Class-level constants | 110 in plain classes, but `Final` forbids an override in another module; 2 sites in `@final` classes |
 | `doc-comments` | A trailing comment moved above as `#:` | 94 sites, but the README makes that the place for a why-note |
 | `doc-comments` | Unannotated `self.x`, TypedDict and Protocol members, plain-class attributes | Nothing marks them as declarations, or too rare |
+
+The `type-aliases` lead on other subscripts was built after all, on 2026-11-24, because the maintainer asked for it:
+`Index = dict[str, int]` and `Lookup = Mapping[str, Row]` are aliases now, by a table of the standard library's
+generic types (`GENERICS` in `src/brash/type_aliases.py`), the names `typing` has for them among them. The case that
+pinned it, "Another subscript", now holds a subscript of something else, `Table[Row]`, which is still left alone, as
+`Annotated[...]` is. On the current sdists of the 30 projects, 7,424 files that parse: 246 sites in 141 files before,
+321 in 169 after, so 75 new sites in 51 files, 11 of them in tests; no site is lost. 21 are under typing's `Tuple`,
+`Dict`, `List` and `Set`, which `HEADS` did not have, and 7 are a `Union`, an `Optional` or a `Literal` that stayed
+before only because an alias left alone read it. Every rewritten file parses, and a second run changes nothing, also
+after ruff 0.17.6's fixes of UP006, UP007, UP035 and UP045, its import fix and its format. All 75 were read as a list of the
+assignments, and each is a type. The type checkers were not run. One site shows a limit the codemod had already: a
+name read only inside a quoted annotation of an alias that stays an assignment (`IntList = list[int]` beside
+`OuterDict = dict[str, 'IntList']`, in pydantic's tests) is rewritten, since a quoted name is not counted as a read.
+It does not fire on brash's own code.
 
 ## Defects found in the existing codemods
 
