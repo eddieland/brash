@@ -7,6 +7,61 @@ plus `tuple[X, ...]` in `general-params`. Two more are sound as opt-in codemods,
 convention. Twelve ideas are shelved, 24 are untested, and three defects turned up in
 the codemods brash already has.
 
+## Next steps, in order
+
+The order for whoever picks this up next. Each step is one PR unless it says otherwise. It puts what is wrong in
+shipped code first, then what unblocks the most, then the ideas by strength of evidence. Tick a step here in the PR
+that does it.
+
+The prototypes and the corpus were not kept, so every step that builds a codemod starts by writing it again from its
+entry, and its PR says how the numbers it relies on were checked again, or that they were not.
+
+1. **Fix the defects in the codemods brash ships.** They write wrong code in projects today, the fixes are known and
+   each is a few lines with a case. See "Defects found in the existing codemods".
+   - [ ] `type-aliases`: leave alone an alias with a quoted name directly inside a `Union` or `Optional`. First,
+     because the result raises at run time, and two corpus aliases hit it.
+   - [ ] `general-params`: check the slice's parent for a shadowed builtin, not only the parameter's own.
+   - [ ] `general-params`: leave alone a function the module names as a value. This one waits on decision A below,
+     because it changes what the codemod rewrites today.
+   - [ ] brash's own two parameters, `_choose` and `_with_imports`. Trivial, and by hand.
+2. **Let a codemod be off by default.** `extend-select` exists since #12, so a project can already name a codemod to
+   run as well. What is missing is the other half: a codemod that says it does not run unless `select` or
+   `extend-select` names it, as `MINIMUM_PYTHON` says what it needs. It is small, it unblocks steps 5 and 7, and it
+   settles how every later idea of "taste" is judged. It changes `brash.command.Command`, so its PR says so.
+3. **Build `empty-collections`.** The strongest evidence of any idea, and nothing outside the function can see the
+   rewrite. Keep the join rule, which supplies half the sites and was right in the sample. Leave out the
+   cross-function rule, which is the larger change.
+4. **Extend `general-params` with star-unpacking and `tuple[X, ...]`.** After the third defect of step 1, since both
+   rest on the named-as-a-value rule. Then look again at the optional-collections rider, which is 40 lines on top
+   and waits on decision C.
+5. **Build `explicit-override`, off by default.** After step 2. It is sound, with no wrong site and no new
+   diagnostic, but only 3 of 30 projects use `@override`, it cannot fire on brash's own code, and its tester gave it
+   0.6.
+6. **Take the `Union[...]` and `Optional[...]` rider into `type-aliases`.** About 12 lines once the first defect of
+   step 1 has added the quoted-member guard it shares. Rare, so only if a maintainer says the rate bar does not apply
+   to one more row of a table.
+7. **The two opt-in ideas**, after step 2, each behind a decision. Narrower `Sequence` and `Collection` first: it is
+   the AGENTS.md rule and the only idea that fires on brash, but it needs brash to remove an import it orphans
+   (decision D). `docstring-types` second: it needs a Google docstring parser and decision E.
+8. **Test before building anything else.** Of the untested ideas, `todo-colons` is the one to try first: smallest,
+   safest, and ruff reports it with no fix. `section-order` is next if step 7 brings a docstring parser. Give the
+   others no time until someone asks for one: fifteen of eighteen tested ideas failed.
+
+Not to do: anything under Shelved without the fact its "Reopen if" names, and anything under "Rejected without
+testing".
+
+Decisions a maintainer has to make, with what this document's evidence suggests. An agent does not settle these by
+building; it asks, or builds the smaller form and says so in the PR.
+
+| | Decision | Blocks | The evidence suggests |
+| --- | --- | --- | --- |
+| A | Does the named-as-a-value rule apply to all of `general-params`, removing 49 of its 417 corpus sites? | Steps 1 and 4 | Yes: the typer case is a real break, and one rule for the whole codemod is consistent |
+| B | Was "unpacked" left alone in `general-params` on purpose? | Step 4 | Unknown; 78 of 82 sampled rewrites were right |
+| C | Is the pinned "Optional" case in `tests/cases/general-params.md` spelling or intent? | The rider in step 4 | Unknown |
+| D | May a codemod remove an import it orphans? | Step 7 | Needed: without it 31 of 66 files end with an unused import |
+| E | May brash edit `__doc__`? | Step 7, and the docstring family | Only as opt-in; no corpus break was found, three were constructed |
+| F | Do `mock-namespace` and `lazy-logging` ship in brash, off by default, or stay a project's own? | Nothing yet | Not before step 2 |
+
 ## How to use this document
 
 Every idea has one entry, written to the same template, and one row in the index. To add an idea, copy the template,
@@ -79,9 +134,10 @@ switch:
 - It is wrong at some sites in a project that does want the convention, with no rule to tell which.
 - It breaks something in a module it cannot see.
 
-**Open decision.** Every codemod runs by default today, and `select` and `ignore` only narrow that. An opt-in codemod
-needs a mechanism: a codemod marked off unless named in `select` or in a new `extend-select`. That changes what
-`[tool.brash]` means, so it is a change other projects rely on.
+**Half done.** `extend-select` shipped in #12, so a project can name a codemod to run on top of the defaults. Every
+codemod still runs by default, though: what is left is a way for a codemod to say it is off unless `select` or
+`extend-select` names it. That adds to `brash.command.Command`, which other projects rely on. It is step 2 of the next
+steps.
 
 ### How ideas failed
 
@@ -389,7 +445,7 @@ rewrite as left alone.
 ## Opt-in
 
 Two ideas are sound for a project that holds the convention and would be noise in one that does not. Each should be
-built to run only where a project selects it. Both wait on the open decision under "Default-on and opt-in".
+built to run only where a project selects it. Both wait on step 2 of the next steps: a codemod that is off by default.
 
 ### general-params: narrower Sequence and Collection
 
