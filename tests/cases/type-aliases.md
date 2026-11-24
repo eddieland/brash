@@ -151,6 +151,16 @@ type Units = tuple[Unit, ...]
 type Found = Unit | None
 ```
 
+### Quoted name inside a member of a union
+
+```python
+Rows = tuple[Union[int, list["Row"]], ...]
+```
+
+```python
+type Rows = tuple[Union[int, list["Row"]], ...]
+```
+
 ### Beside one read at run time
 
 ```python
@@ -257,6 +267,14 @@ Rows = list[Row]
 ```python
 Both = Color.RED | Color.BLUE
 Either = Left | Right
+```
+
+### Quoted member of a union
+
+```python
+Highlighter = Callable[[Union[str, "Text"]], "Text"]
+Found = tuple[Optional["Row"], int]
+Rows = Row | typing.Optional['Row']
 ```
 
 ### Not a type expression
