@@ -78,8 +78,10 @@ class Config(BaseModel):
 
     They run in brash's order whatever the list's, and `--only` on the command line is taken in place of it.
     """
+    extend_select: tuple[str, ...] = Field(default=(), alias="extend-select")
+    """The codemods that run as well, by name: added to those of `select`, or to those that run by default."""
     ignore: tuple[str, ...] = ()
-    """The codemods that do not run, by name: a blocklist, taken from `select` or from every codemod."""
+    """The codemods that do not run, by name: a blocklist, taken from those `select` and `extend-select` leave on."""
     per_file_ignores: Mapping[str, tuple[str, ...]] = Field(default_factory=dict, alias="per-file-ignores")
     """The codemods that do not run on some files, by name, under a glob pattern of the files' paths.
 

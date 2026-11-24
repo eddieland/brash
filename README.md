@@ -68,9 +68,9 @@ lint:
 	uv run brash --check .
 ```
 
-Every codemod runs by default. A project turns one off, or names the few it wants, with `ignore` and `select` in
-its [configuration](#configuration); `--only` names the ones for a single run, and is taken in place of both. Its
-`per-file-ignores` there turns one off for some files alone.
+Every codemod runs by default. A project turns one off, or names the few it wants, with `ignore`, `select` and
+`extend-select` in its [configuration](#configuration); `--only` names the ones for a single run, and is taken in
+place of them. Its `per-file-ignores` there turns one off for some files alone.
 
 A project whose code runs on a Python older than 3.12 sets its `target-version`, and a codemod that writes syntax
 that Python does not have, which is `type-aliases`, does not run; `--target-version py310` says it for a single run.
@@ -94,10 +94,14 @@ no-print = "codemods.no_print:NoPrint"
 
 - **`select`** is an allowlist: the codemods that run, by name, and no other. Left out, every codemod runs, so a
   release of brash that adds one runs it; with `select`, a new one waits to be named.
-- **`ignore`** is a blocklist: the codemods that do not run. With both, a run has the codemods of `select` that
-  `ignore` does not name. Either takes your project's own codemods as it takes brash's, and a name no codemod has
-  fails the run. The order codemods run in is brash's, whatever the list's. `--only` on the command line is taken in
-  place of both, so it runs an ignored codemod, and `--list` lists every codemod, on or off.
+- **`extend-select`** names codemods that run as well: added to those of `select`, or, where there is no `select`,
+  to those that run by default. Every codemod runs by default today, so it only adds to a `select`; it is how a
+  project will turn on a codemod that is off by default, and still run each one a release of brash adds.
+- **`ignore`** is a blocklist: the codemods that do not run. With the others, a run has the codemods of `select`
+  and `extend-select` that `ignore` does not name. Each takes your project's own codemods as it takes brash's, and
+  a name no codemod has fails the run. The order codemods run in is brash's, whatever the list's. `--only` on the
+  command line is taken in place of all three, so it runs an ignored codemod, and `--list` lists every codemod, on
+  or off.
 - **`per-file-ignores`** turns codemods off for some files alone: each key is a glob pattern, as `exclude`'s are and
   matching what one would, and its value the codemods that do not run on the files it matches. A file that several
   patterns match is rewritten by none of the codemods any of them names. It holds for a file named outright, and for
@@ -135,7 +139,7 @@ not have, or a value of the wrong type, fails the run with exit code 1 and a lin
 key:
 
 ```text
-Error: /repo/pyproject.toml: tool.brash.excludes: no such setting; there are `codemods`, `select`, `ignore`, `per-file-ignores`, `target-version`, `exclude`
+Error: /repo/pyproject.toml: tool.brash.excludes: no such setting; there are `codemods`, `select`, `extend-select`, `ignore`, `per-file-ignores`, `target-version`, `exclude`
 ```
 
 ## As a git hook

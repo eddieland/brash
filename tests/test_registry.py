@@ -17,6 +17,9 @@ from brash import config, main, registry
 from brash.config import ConfigError
 from brash.registry import CODEMODS, RegistryError
 
+#: Every setting there is, as the message about one there is not lists them.
+SETTINGS: Final = "`codemods`, `select`, `extend-select`, `ignore`, `per-file-ignores`, `target-version`, `exclude`"
+
 #: A project's codemod, which renames the constant `OLD`, and so runs on what `final-constants` wrote.
 LOCAL: Final = '''\
 import libcst as cst
@@ -176,8 +179,7 @@ def test_an_entry_that_names_no_codemod_fails_the_run_and_says_which(project: Pa
         pytest.param("[tool]\nbrash = 3\n", "tool.brash: Input should be a valid dictionary", id="no table"),
         pytest.param(
             "[tool.brash]\ncodemod = {}\n",
-            "tool.brash.codemod: no such setting; there are `codemods`, `select`, `ignore`, `per-file-ignores`, "
-            "`target-version`, `exclude`",
+            f"tool.brash.codemod: no such setting; there are {SETTINGS}",
             id="another key",
         ),
         pytest.param(
@@ -251,10 +253,7 @@ def test_everything_wrong_with_a_table_is_reported_at_once_each_with_the_file(pr
     assert sorted(line.removeprefix(f"{project / 'pyproject.toml'}: ") for line in str(raised.value).splitlines()) == [
         "tool.brash.codemods.rename: `nope` is not a `module:Class`",
         "tool.brash.exclude: Input should be a valid tuple",
-        (
-            "tool.brash.excludes: no such setting; there are `codemods`, `select`, `ignore`, `per-file-ignores`, "
-            "`target-version`, `exclude`"
-        ),
+        f"tool.brash.excludes: no such setting; there are {SETTINGS}",
     ]
 
 
@@ -304,10 +303,7 @@ def test_what_is_wrong_in_a_brash_toml_is_at_its_key_there_with_no_table_above_i
 
     assert sorted(line.removeprefix(f"{project / 'brash.toml'}: ") for line in str(raised.value).splitlines()) == [
         "codemods.rename: `nope` is not a `module:Class`",
-        (
-            "excludes: no such setting; there are `codemods`, `select`, `ignore`, `per-file-ignores`, "
-            "`target-version`, `exclude`"
-        ),
+        f"excludes: no such setting; there are {SETTINGS}",
     ]
 
 
@@ -397,6 +393,24 @@ def test_select_runs_the_codemods_it_names_alone_but_for_those_ignore_names(proj
     assert stale.read_text() == "from typing import Final\n\nOLD: Final = 3\n"
 
 
+def test_extend_select_adds_to_the_codemods_select_names_and_ignore_is_taken_from_both(project: Path) -> None:
+    configure(project, CONFIGURED + "select = ['doc-comments']\nextend-select = ['rename', 'final-constants']\n")
+    extended = registry.selected(config.load(project), registry.registered(config.load(project)))
+    configure(project, CONFIGURED + "select = []\nextend-select = ['rename', 'final-constants']\nignore = ['rename']\n")
+    ignored = registry.selected(config.load(project), registry.registered(config.load(project)))
+
+    assert extended == ["final-constants", "doc-comments", "rename"]
+    assert ignored == ["final-constants"]
+
+
+def test_extend_select_with_no_select_leaves_every_codemod_running(project: Path) -> None:
+    configure(project, CONFIGURED + "extend-select = ['rename']\n")
+
+    chosen = registry.selected(config.load(project), registry.registered(config.load(project)))
+
+    assert chosen == [*CODEMODS, "rename"]
+
+
 def test_selecting_none_runs_none(project: Path) -> None:
     stale = project / "stale.py"
     stale.write_text(BEFORE)
@@ -418,7 +432,7 @@ def test_only_is_taken_in_place_of_the_projects_choice_and_list_names_every_code
     assert [line.split()[0] for line in listed.splitlines()] == [*CODEMODS, "rename"]
 
 
-@pytest.mark.parametrize("setting", ["select", "ignore"])
+@pytest.mark.parametrize("setting", ["select", "extend-select", "ignore"])
 def test_a_choice_of_a_codemod_there_is_not_fails_the_run_and_names_those_there_are(
     project: Path,
     setting: str,
