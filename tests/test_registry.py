@@ -469,7 +469,7 @@ def test_a_choice_of_a_codemod_there_is_not_fails_the_run_and_names_those_there_
 
     assert code == 1
     assert f"pyproject.toml: tool.brash.{setting}: `final-constant` is not a codemod; there are " in output
-    assert "`general-params`, `rename`" in output
+    assert "`empty-collections`, `rename`" in output
     assert stale.read_text() == BEFORE
 
 

@@ -32,6 +32,7 @@ entry, and its PR says how the numbers it relies on were checked again, or that 
 3. **Build `empty-collections`.** The strongest evidence of any idea, and nothing outside the function can see the
    rewrite. Keep the join rule, which supplies half the sites and was right in the sample. Leave out the
    cross-function rule, which is the larger change.
+   - [x] Done, with the join rule and without the cross-function one. See "Built" in its entry.
 4. **Extend `general-params` with star-unpacking and `tuple[X, ...]`.** After the third defect of step 1, since both
    rest on the named-as-a-value rule. Then look again at the optional-collections rider, which is 40 lines on top
    and waits on decision C.
@@ -278,6 +279,13 @@ it.
 **Open decisions.** Whether the join rule belongs, since without it the rate falls by half. Whether to take an empty
 collection passed to a typed function of the same module, which covers 3 of brash's 4 misses but needs resolution across
 functions.
+
+**Built** in `src/brash/empty_collections.py`, about 550 lines with its docstrings, from this entry and not from the
+prototype, which was not kept. It has the three rules and every exclusion above, and runs by default. The corpus was not
+kept either, so the numbers above were not reproduced. Instead it was run on the sdists of 14 of the 30 projects
+(httpx, rich, click, attrs, pytest, black, starlette, werkzeug, flask, jinja2, typer, pip-tools, hatch, structlog):
+108 sites in 74 of 2,385 files, 88 of them `list[str]`. Every output parses, and a second run changes nothing. All 10
+rewrites read in context were right. No type checker was run on the result, and brash's own code has no site.
 
 ### explicit-override
 

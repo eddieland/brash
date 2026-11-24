@@ -231,6 +231,17 @@ The hook runs in an environment of its own, which holds brash and nothing of you
   parameter of a function with a decorator but a few plain ones (a click command, an override), and a method of a
   class with a base, or of one the module derives another class from, which may override or be overridden. The import
   goes under `if TYPE_CHECKING:` where the module has that block and postpones its annotations.
+- **`empty-collections`** annotates an empty `[]`, `{}`, or `set()` that a function fills, which a strict pyright
+  reports as partly unknown and no tool annotates: `found = []` that a function annotated `-> list[Path]` returns
+  becomes `found: list[Path] = []`. The type comes from the return annotation, where the name is returned under its
+  own type, an abstract one such as `Sequence[Path]`, or either `| None`, or returned through `sorted`, `list`,
+  `tuple`, `set`, or `frozenset`; or from a string's `join`, which makes the items `str`. The rules that apply must
+  agree. It leaves alone a name its function binds more than once, or uses in any way but a known few (filled by
+  `.append` and its kin as a statement, stored to by `[k] =` or `del`, measured, tested, searched with `in`, joined,
+  or returned), a return annotation that is quoted, an alias, a wider union, or names `Any`, an element type the
+  function or its class binds, a generator, and a function with a checker's or a lint's directive on its header, on
+  the assignment, or on the `return`. Python never evaluates a local's annotation, so nothing outside the function
+  sees it.
 
 Each is opinionated, and each is conservative: where it cannot be sure a rewrite is right, it leaves the code alone
 and reports nothing. The cases each one is held to are Python snippets, before and after, in
