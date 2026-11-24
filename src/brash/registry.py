@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Final
 from brash.command import Command
 from brash.doc_comments import DocComments
 from brash.empty_collections import EmptyCollections
+from brash.explicit_override import ExplicitOverride
 from brash.final_constants import FinalConstants
 from brash.general_params import GeneralParams
 from brash.type_aliases import TypeAliases
@@ -38,6 +39,7 @@ CODEMODS: Final[Mapping[str, type[Command]]] = {
     "doc-comments": DocComments,
     "general-params": GeneralParams,
     "empty-collections": EmptyCollections,
+    "explicit-override": ExplicitOverride,
 }
 
 

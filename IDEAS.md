@@ -39,6 +39,7 @@ entry, and its PR says how the numbers it relies on were checked again, or that 
 5. **Build `explicit-override`, off by default.** After step 2. It is sound, with no wrong site and no new
    diagnostic, but only 3 of 30 projects use `@override`, it cannot fire on brash's own code, and its tester gave it
    0.6.
+   - [x] Done, off by default. See "Built" in its entry.
 6. **Take the `Union[...]` and `Optional[...]` rider into `type-aliases`.** About 12 lines once the first defect of
    step 1 has added the quoted-member guard it shares. Rare, so only if a maintainer says the rate bar does not apply
    to one more row of a table.
@@ -339,6 +340,14 @@ It adds `from typing import override` when the module does not have it.
 
 **Open decisions.** Whether a codemod that cannot fire on brash's own code is worth carrying. Whether it runs by default
 or is opt-in.
+
+**Built** in `src/brash/explicit_override.py`, off by default (`OPT_IN = True`) as step 5 says, from this entry and not
+from the prototype, which was not kept. It has every exclusion above, and two more: a method with any decorator, since
+where `@override` goes among others is a choice, and `__init__` and `__new__`, which brash itself leaves unmarked. The
+corpus was not kept, so the numbers above were not reproduced. Instead it was run on the sdists of 14 of the 30
+projects (those listed for `empty-collections`): 361 sites in 57 of 2,385 files, in 13 of the 14 projects. Every
+output parses, and a second run changes nothing. All 12 sampled sites override a method an ancestor in the module
+defines. No type checker was run on the result, and brash's own code has no site.
 
 ### general-params: star-unpacking and tuple\[X, ...\]
 

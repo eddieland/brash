@@ -42,6 +42,8 @@ class Rename(Command):
 class NotOne:
     """No codemod."""
 '''
+#: brash's own codemods that run where a project names none, in the order they run.
+BY_DEFAULT: Final = [name for name, codemod in CODEMODS.items() if not codemod.OPT_IN]
 #: The start of a `pyproject.toml` that registers it, for a test to add `[tool.brash]`'s other settings to.
 CONFIGURED: Final = '[tool.brash]\ncodemods = { rename = "local_codemods.rename:Rename" }\n'
 BEFORE: Final = "OLD = 3\n"
@@ -403,12 +405,12 @@ def test_extend_select_adds_to_the_codemods_select_names_and_ignore_is_taken_fro
     assert ignored == ["final-constants"]
 
 
-def test_extend_select_with_no_select_leaves_every_codemod_running(project: Path) -> None:
+def test_extend_select_with_no_select_adds_to_the_codemods_on_by_default(project: Path) -> None:
     configure(project, CONFIGURED + "extend-select = ['rename']\n")
 
     chosen = registry.selected(config.load(project), registry.registered(config.load(project)))
 
-    assert chosen == [*CODEMODS, "rename"]
+    assert chosen == [*BY_DEFAULT, "rename"]
 
 
 def test_a_codemod_off_by_default_runs_only_where_select_extend_select_or_only_names_it(project: Path) -> None:
@@ -428,7 +430,7 @@ def test_a_codemod_off_by_default_runs_only_where_select_extend_select_or_only_n
     left = stale.read_text()
     only = invoke("--only", "rename", stale)
 
-    assert chosen == [[*CODEMODS], [*CODEMODS, "rename"], ["rename"]]
+    assert chosen == [BY_DEFAULT, [*BY_DEFAULT, "rename"], ["rename"]]
     assert listed.splitlines()[-1] == "rename  Rename `OLD` to `NEW`. (off by default)"
     assert by_default[0] == only[0] == 0
     assert left == "from typing import Final\n\nOLD: Final = 3\n"
@@ -469,7 +471,7 @@ def test_a_choice_of_a_codemod_there_is_not_fails_the_run_and_names_those_there_
 
     assert code == 1
     assert f"pyproject.toml: tool.brash.{setting}: `final-constant` is not a codemod; there are " in output
-    assert "`empty-collections`, `rename`" in output
+    assert "`explicit-override`, `rename`" in output
     assert stale.read_text() == BEFORE
 
 
