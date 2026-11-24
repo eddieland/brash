@@ -111,7 +111,12 @@ def test_list_names_every_codemod_and_needs_no_path() -> None:
     code, output = invoke("--list")
 
     assert code == 0
-    assert output.splitlines() == [f"{name}  {codemod.DESCRIPTION}" for name, codemod in CODEMODS.items()]
+    assert output.splitlines() == [
+        f"{name}  {codemod.DESCRIPTION}{' (off by default)' if codemod.OPT_IN else ''}"
+        for name, codemod in CODEMODS.items()
+    ]
+    assert "explicit-override  " in output.splitlines()[-1]
+    assert output.splitlines()[-1].endswith("(off by default)")
 
 
 def test_no_path_is_a_usage_error() -> None:

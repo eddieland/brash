@@ -68,13 +68,14 @@ lint:
 	uv run brash --check .
 ```
 
-Every codemod runs by default but one that says it is off by default, which none of brash's own does yet. A project
-turns one off, or names the few it wants, with `ignore`, `select` and `extend-select` in its
-[configuration](#configuration); `--only` names the ones for a single run, and is taken in place of them. Its
-`per-file-ignores` there turns one off for some files alone.
+Every codemod runs by default but one that says it is off by default, which of brash's own is `explicit-override`,
+for a convention few projects hold. A project turns one off, or names the few it wants, with `ignore`, `select` and
+`extend-select` in its [configuration](#configuration); `--only` names the ones for a single run, and is taken in
+place of them. Its `per-file-ignores` there turns one off for some files alone.
 
 A project whose code runs on a Python older than 3.12 sets its `target-version`, and a codemod that writes syntax
-that Python does not have, which is `type-aliases`, does not run; `--target-version py310` says it for a single run.
+that Python does not have, which is `type-aliases` or `explicit-override`, does not run; `--target-version py310`
+says it for a single run.
 
 ## Configuration
 
@@ -242,6 +243,17 @@ The hook runs in an environment of its own, which holds brash and nothing of you
   function or its class binds, a generator, and a function with a checker's or a lint's directive on its header, on
   the assignment, or on the `return`. Python never evaluates a local's annotation, so nothing outside the function
   sees it.
+- **`explicit-override`**, off by default, puts `@override` on a method that overrides one of a base class the module
+  defines, so the type checker reports it once the base's is renamed; mypy, pyrefly, and basedpyright each report an
+  override without it, and none writes it. It imports `override` from `typing` where the module has no import of it.
+  A base is a class among the module's own statements, bound once, above the class that derives from it, with no
+  decorator but one that hands the class back (`dataclass`, `final`, `total_ordering`, `runtime_checkable`); a method
+  overrides when such a base, directly or through its own, defines it once. So most overrides, of a base imported
+  from elsewhere, are not marked. It leaves alone a method with a decorator, one its class binds again, `__init__` and
+  `__new__`, one with an unannotated parameter, whose type pyrefly would then take from the base's, and one with a
+  checker's or a lint's directive on or above its header, and a module with a star import or another binding of
+  `override`. `typing.override` is Python 3.12's, so it does not run where the
+  [`target-version`](#configuration) is older.
 
 Each is opinionated, and each is conservative: where it cannot be sure a rewrite is right, it leaves the code alone
 and reports nothing. The cases each one is held to are Python snippets, before and after, in
