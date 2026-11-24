@@ -777,6 +777,16 @@ def ordered(items: list[str]) -> int:
     return len(sorted(items))
 ```
 
+### A builtin's name bound around a slice
+
+```python
+from mylib import sorted
+
+
+def ordered(items: list[str]) -> int:
+    return len(sorted(items[1:]))
+```
+
 ### A method another class of the module overrides
 
 ```python

@@ -403,15 +403,20 @@ def _abstract(
     return _choose(head, reads)
 
 
-def _shadowed(use: ast.Name, parents: Mapping[ast.AST, ast.AST], bound: AbstractSet[str]) -> bool:
+def _shadowed(use: ast.expr, parents: Mapping[ast.AST, ast.AST], bound: AbstractSet[str]) -> bool:
     """Whether a read is a call of a name the module binds, which is then no builtin: `sorted` imported from elsewhere.
+
+    A slice is read as the parameter is, so the call around `items[1:]` is checked as the one around `items`.
 
     Returns:
         True when it is.
     """
-    match parents[use]:
+    parent = parents[use]
+    match parent:
         case ast.Call(func=ast.Name(id=name)):
             return name in bound
+        case ast.Subscript(value=value, slice=ast.Slice()) if value is use:
+            return _shadowed(parent, parents, bound)
         case _:
             return False
 
