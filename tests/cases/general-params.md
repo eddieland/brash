@@ -496,6 +496,36 @@ def total(costs: Iterable[float], path: Path) -> float:
     return sum(costs)
 ```
 
+### Called by name, and by nothing else
+
+```python
+def total(costs: list[float]) -> float:
+    return sum(costs)
+
+
+class Report:
+    def lines(self, rows: list[str]) -> int:
+        return len(rows)
+
+    def size(self) -> float:
+        return total([1.0]) + self.lines(["a"])
+```
+
+```python
+from collections.abc import Collection, Iterable
+
+def total(costs: Iterable[float]) -> float:
+    return sum(costs)
+
+
+class Report:
+    def lines(self, rows: Collection[str]) -> int:
+        return len(rows)
+
+    def size(self) -> float:
+        return total([1.0]) + self.lines(["a"])
+```
+
 ## Left alone
 
 ### Mutated
@@ -785,6 +815,63 @@ from mylib import sorted
 
 def ordered(items: list[str]) -> int:
     return len(sorted(items[1:]))
+```
+
+### A function named as a value
+
+```python
+import typer
+
+
+def main(files: list[str]) -> None:
+    for file in files:
+        print(file)
+
+
+if __name__ == "__main__":
+    typer.run(main)
+```
+
+### A method named as a value
+
+```python
+from threading import Thread
+
+
+class Worker:
+    def run(self, jobs: list[str]) -> None:
+        for job in jobs:
+            print(job)
+
+    def start(self) -> None:
+        Thread(target=self.run, args=([],)).start()
+```
+
+### A function wrapped, returned, or registered
+
+```python
+from functools import lru_cache
+
+
+def _size(names: frozenset[str]) -> int:
+    return len(names)
+
+
+size = lru_cache(maxsize=1024)(_size)
+
+
+def counter() -> object:
+    def count(rows: list[str]) -> int:
+        return len(rows)
+
+    return count
+
+
+def first(rows: list[str]) -> bool:
+    return bool(rows)
+
+
+HANDLERS = {"first": first}
 ```
 
 ### A method another class of the module overrides

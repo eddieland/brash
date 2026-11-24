@@ -23,6 +23,9 @@ It is deliberately narrow, since a wrong widening fails the type checker at a ca
   type it is annotated with;
 - every parameter of a function with a decorator other than `staticmethod`, `classmethod`, a context manager's, or
   pytest's: a click command, an overload, an override, and a route whose framework reads its annotations at run time;
+- every parameter of a function the module names other than to call it, as `typer.run(main)` or
+  `Thread(target=self.run)` does: what takes the function may read its annotations at run time, or need the concrete
+  type, as a cache needs a hashable one. Any read of the name counts, whatever it then names;
 - a method of a class with a base other than `object`, which may override or implement one declared elsewhere, or a
   protocol's, which its implementations must match, and one of a class the module derives another from, whose
   override may keep the concrete type; a method under an `if` or `try` in a class body is a method still;
@@ -170,11 +173,12 @@ def widened(source: str) -> dict[tuple[int, str], str]:
     parents = {child: node for node in ast.walk(module) for child in ast.iter_child_nodes(node)}
     bound = _bound_anywhere(module)
     subclassed = _subclassed(module)
+    named = _named_as_values(module, parents)
     found: dict[tuple[int, str], str] = {}
     for function in ast.walk(module):
         if not isinstance(function, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
-        if not _plain(function, parents, subclassed):
+        if function.name in named or not _plain(function, parents, subclassed):
             continue
         for argument in [*function.args.posonlyargs, *function.args.args, *function.args.kwonlyargs]:
             abstract = _abstract(function, argument, parents, bound)
@@ -308,6 +312,27 @@ def _subclassed(module: ast.Module) -> frozenset[str]:
         # A generic base, `Base[int]`, names `Base` as its subscript's value.
         if (name := last_name(base.value if isinstance(base, ast.Subscript) else base)) is not None
     )
+
+
+def _named_as_values(module: ast.Module, parents: Mapping[ast.AST, ast.AST]) -> frozenset[str]:
+    """The names the module reads other than to call them, bare or as an attribute: `main` of `typer.run(main)`.
+
+    A function of such a name may be handed to something that reads its annotations as the program runs. A name is
+    taken as the function's wherever it is read, so a local of the same name only leaves a parameter unwidened.
+
+    Returns:
+        The names.
+    """
+    found: set[str] = set()
+    for node in ast.walk(module):
+        match node:
+            case ast.Name(id=name, ctx=ast.Load()) | ast.Attribute(attr=name, ctx=ast.Load()):
+                parent = parents.get(node)
+                if not (isinstance(parent, ast.Call) and parent.func is node):
+                    found.add(name)
+            case _:
+                pass
+    return frozenset(found)
 
 
 def _plain(
