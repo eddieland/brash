@@ -21,8 +21,8 @@ entry, and its PR says how the numbers it relies on were checked again, or that 
    - [x] `type-aliases`: leave alone an alias with a quoted name directly inside a `Union` or `Optional`. First,
      because the result raises at run time, and two corpus aliases hit it.
    - [x] `general-params`: check the slice's parent for a shadowed builtin, not only the parameter's own.
-   - [ ] `general-params`: leave alone a function the module names as a value. This one waits on decision A below,
-     because it changes what the codemod rewrites today.
+   - [x] `general-params`: leave alone a function the module names as a value. It waited on decision A below, since
+     it changes what the codemod rewrites; A is decided yes.
    - [x] brash's own two parameters, `_choose` and `_with_imports`. Trivial, and by hand.
 2. **Let a codemod be off by default.** `extend-select` exists since #12, so a project can already name a codemod to
    run as well. What is missing is the other half: a codemod that says it does not run unless `select` or
@@ -55,16 +55,17 @@ Not to do: anything under Shelved without the fact its "Reopen if" names, and an
 testing".
 
 Decisions a maintainer has to make, with what this document's evidence suggests. An agent does not settle these by
-building; it asks, or builds the smaller form and says so in the PR.
+building; it asks, or builds the smaller form and says so in the PR. On 2026-11-24 the maintainer left them to the
+agent's judgement: each is decided in the PR of the step it blocks, with the reason there, and recorded under Decided.
 
-| | Decision | Blocks | The evidence suggests |
-| --- | --- | --- | --- |
-| A | Does the named-as-a-value rule apply to all of `general-params`, removing 49 of its 417 corpus sites? | Steps 1 and 4 | Yes: the typer case is a real break, and one rule for the whole codemod is consistent |
-| B | Was "unpacked" left alone in `general-params` on purpose? | Step 4 | Unknown; 78 of 82 sampled rewrites were right |
-| C | Is the pinned "Optional" case in `tests/cases/general-params.md` spelling or intent? | The rider in step 4 | Unknown |
-| D | May a codemod remove an import it orphans? | Step 7 | Needed: without it 31 of 66 files end with an unused import |
-| E | May brash edit `__doc__`? | Step 7, and the docstring family | Only as opt-in; no corpus break was found, three were constructed |
-| F | Do `mock-namespace` and `lazy-logging` ship in brash, off by default, or stay a project's own? | Nothing yet | Not before step 2 |
+| | Decision | Blocks | The evidence suggests | Decided |
+| --- | --- | --- | --- | --- |
+| A | Does the named-as-a-value rule apply to all of `general-params`, removing 49 of its 417 corpus sites? | Steps 1 and 4 | Yes: the typer case is a real break, and one rule for the whole codemod is consistent | Yes, for the whole codemod |
+| B | Was "unpacked" left alone in `general-params` on purpose? | Step 4 | Unknown; 78 of 82 sampled rewrites were right | |
+| C | Is the pinned "Optional" case in `tests/cases/general-params.md` spelling or intent? | The rider in step 4 | Unknown | |
+| D | May a codemod remove an import it orphans? | Step 7 | Needed: without it 31 of 66 files end with an unused import | |
+| E | May brash edit `__doc__`? | Step 7, and the docstring family | Only as opt-in; no corpus break was found, three were constructed | |
+| F | Do `mock-namespace` and `lazy-logging` ship in brash, off by default, or stay a project's own? | Nothing yet | Not before step 2 | |
 
 ## How to use this document
 
@@ -862,7 +863,7 @@ The scout that found the two extensions above also measured these and dropped th
 ## Defects found in the existing codemods
 
 Three defects in codemods brash already ships turned up during testing. All three were reproduced against the current
-code. The first two are fixed; the third is not, nor filed.
+code. All three are fixed.
 
 - [x] **`type-aliases` and ruff together write an alias that raises.** `HighlighterType = Callable[[Union[str, "Text"]],
   "Text"]` becomes a `type` statement, and ruff's safe UP007 fix then writes `Callable[[str | "Text"], "Text"]`. Reading
@@ -871,10 +872,12 @@ code. The first two are fixed; the third is not, nor filed.
 - [x] **`general-params` misses a shadowed builtin around a slice.** With `from mylib import sorted`, it correctly
   leaves `len(sorted(items))` alone but widens `items: list[str]` to `Sequence[str]` in `len(sorted(items[1:]))`.
   `_shadowed` checked the parameter's own parent, not the slice's; it now follows a slice to the call around it.
-- [ ] **`general-params` widens a function the module hands to a framework.** `def main(files: list[str])` passed to
+- [x] **`general-params` widens a function the module hands to a framework.** `def main(files: list[str])` passed to
   `typer.run(main)` becomes `Iterable[str]`, and typer reads the annotation at run time. The rewrite was confirmed;
-  typer itself was not run. 49 of the codemod's 417 corpus sites are in functions the module names as a value. The
-  named-as-a-value rule from the star-unpacking extension would close this.
+  typer itself was not run. 49 of the codemod's 417 corpus sites are in functions the module names as a value. Fixed
+  by the named-as-a-value rule of the star-unpacking extension, for the whole codemod (decision A): a function whose
+  name the module reads other than to call it, bare or as an attribute, is left alone. Checked again on the current
+  sdists of the 30 projects: 417 sites in 220 files before, 368 in 200 after, so the rule removes the same 49.
 
 One more finding is about brash's own code, not a codemod. Two parameters in `src/brash/general_params.py` take more
 than they read, by the AGENTS.md rule. Both are widened now:

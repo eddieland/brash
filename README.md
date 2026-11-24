@@ -229,8 +229,10 @@ The hook runs in an environment of its own, which holds brash and nothing of you
   type checker at a call site: it leaves alone a parameter used in any way it does not know to be a read (mutated,
   stored, returned, yielded, compared, or passed to any call but a few builtins whose names the module does not bind),
   one bound again or named by a nested function, one never read, one whose function returns the type it takes, every
-  parameter of a function with a decorator but a few plain ones (a click command, an override), and a method of a
-  class with a base, or of one the module derives another class from, which may override or be overridden. The import
+  parameter of a function with a decorator but a few plain ones (a click command, an override), every parameter of a
+  function the module names other than to call it (`typer.run(main)`, `Thread(target=self.run)`), since what takes the
+  function may read its annotations as the program runs, and a method of a class with a base, or of one the module
+  derives another class from, which may override or be overridden. The import
   goes under `if TYPE_CHECKING:` where the module has that block and postpones its annotations.
 - **`empty-collections`** annotates an empty `[]`, `{}`, or `set()` that a function fills, which a strict pyright
   reports as partly unknown and no tool annotates: `found = []` that a function annotated `-> list[Path]` returns
