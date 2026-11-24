@@ -50,7 +50,7 @@ def _target(_context: click.Context, _parameter: click.Parameter, target: str | 
     "names",
     multiple=True,
     metavar="NAME",
-    help="Run this codemod alone; give it again for each. By default, all the project has not turned off.",
+    help="Run this codemod alone; give it again for each. By default, those the project chooses.",
 )
 @click.option(
     "--target-version",
@@ -73,7 +73,7 @@ def main(
     project, codemods, chosen = _registered(names, target)
     if listing:
         for name, codemod in codemods.items():
-            click.echo(f"{name}  {codemod.DESCRIPTION}")
+            click.echo(f"{name}  {codemod.DESCRIPTION}{' (off by default)' if codemod.OPT_IN else ''}")
         return
     if not paths:
         raise click.UsageError("Give the files or directories to rewrite.")

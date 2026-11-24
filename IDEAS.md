@@ -28,6 +28,7 @@ entry, and its PR says how the numbers it relies on were checked again, or that 
    run as well. What is missing is the other half: a codemod that says it does not run unless `select` or
    `extend-select` names it, as `MINIMUM_PYTHON` says what it needs. It is small, it unblocks steps 5 and 7, and it
    settles how every later idea of "taste" is judged. It changes `brash.command.Command`, so its PR says so.
+   - [x] Done: a codemod that sets `OPT_IN = True` runs only where `select`, `extend-select` or `--only` names it.
 3. **Build `empty-collections`.** The strongest evidence of any idea, and nothing outside the function can see the
    rewrite. Keep the join rule, which supplies half the sites and was right in the sample. Leave out the
    cross-function rule, which is the larger change.
@@ -134,10 +135,9 @@ switch:
 - It is wrong at some sites in a project that does want the convention, with no rule to tell which.
 - It breaks something in a module it cannot see.
 
-**Half done.** `extend-select` shipped in #12, so a project can name a codemod to run on top of the defaults. Every
-codemod still runs by default, though: what is left is a way for a codemod to say it is off unless `select` or
-`extend-select` names it. That adds to `brash.command.Command`, which other projects rely on. It is step 2 of the next
-steps.
+**Done.** `extend-select` shipped in #12, so a project can name a codemod to run on top of the defaults, and a
+codemod says it is off by default with `OPT_IN = True` on its `brash.command.Command`, step 2 of the next steps. Such
+a codemod runs only where `select` or `extend-select` names it, or `--only` does.
 
 ### How ideas failed
 
@@ -445,7 +445,7 @@ rewrite as left alone.
 ## Opt-in
 
 Two ideas are sound for a project that holds the convention and would be noise in one that does not. Each should be
-built to run only where a project selects it. Both wait on step 2 of the next steps: a codemod that is off by default.
+built to run only where a project selects it, as `OPT_IN = True`, which step 2 of the next steps added.
 
 ### general-params: narrower Sequence and Collection
 

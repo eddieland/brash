@@ -18,6 +18,9 @@ class Command(VisitorBasedCodemodCommand):
     #: The oldest Python that runs what the codemod writes, as its major and minor version. A project whose
     #: `target-version` is older does not run the codemod.
     MINIMUM_PYTHON: ClassVar[tuple[int, int]] = (3, 0)
+    #: Whether the codemod is off by default: it runs only where a project's `select` or `extend-select` names it, or
+    #: `--only` does. For a convention a project chooses to hold, which most do not.
+    OPT_IN: ClassVar[bool] = False
 
     @classmethod
     def covers(cls, filename: str | None) -> bool:  # noqa: ARG003
