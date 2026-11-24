@@ -79,9 +79,9 @@ switch:
 - It is wrong at some sites in a project that does want the convention, with no rule to tell which.
 - It breaks something in a module it cannot see.
 
-**Open decision.** Every codemod runs by default today, and `select` and `ignore` only narrow that. An opt-in codemod
-needs a mechanism: a codemod marked off unless named in `select` or in a new `extend-select`. That changes what
-`[tool.brash]` means, so it is a change other projects rely on.
+**Open decision.** Every codemod still runs by default. `extend-select` now names codemods that run as well, so the
+half of the mechanism a project writes exists. The other half does not: a way to mark a codemod off unless a project
+names it. Nor does a table of settings for one codemod, which `newspaper-order` would need.
 
 ### How ideas failed
 
@@ -116,7 +116,7 @@ running it by default, not against building it as opt-in.
 | `self-returns` | New | Shelved | `-> Self` on a method that returns `self` | 8 wrong sites; 3 new mypy errors in jinja2 |
 | `frozen-constants` | New | Shelved | List or set constant to tuple or frozenset | 9 sites in 7,436 files |
 | `raise-from` | New | Shelved | Adds `from e` to a `raise` in a handler | 29 of 59 right; a person must choose |
-| `newspaper-order` | New | Shelved | Moves a private helper below its first caller | Safe form leaves 49 of 178 files in mixed order; 11 of 20 right |
+| `newspaper-order` | New | Shelved | Moves a private helper below its first caller | Best rule puts a drifted helper back exactly 17 of 45 times in brash, 147 of 201 in tox |
 | `method-order` | New | Shelved | The same, for methods in a class | Not run on its own; falls with `newspaper-order` |
 | `typed-fixtures` | New | Shelved | Annotates test parameters from fixtures | New type errors at 23 of 150 sites |
 | `type-params` | New | Shelved | `TypeVar` to PEP 695 syntax | A one-off migration; a type error in cattrs |
@@ -389,7 +389,7 @@ rewrite as left alone.
 ## Opt-in
 
 Two ideas are sound for a project that holds the convention and would be noise in one that does not. Each should be
-built to run only where a project selects it. Both wait on the open decision under "Default-on and opt-in".
+built to run only where a project selects it. Both wait on the rest of the open decision under "Default-on and opt-in".
 
 ### general-params: narrower Sequence and Collection
 
@@ -529,19 +529,74 @@ named handler, they chose `from None` in 84 of 491 cases. `__cause__` is observa
 **Motivation.** AGENTS.md puts each private helper below the first function that calls it. Few projects hold this: 43%
 of corpus helpers already sit below a caller. That alone would make it an opt-in codemod, not a shelved one.
 
-**Evidence.** As first specified it broke the import of `pygments.lexers.configs`, where a helper is used at import
+**First round.** As first specified it broke the import of `pygments.lexers.configs`, where a helper is used at import
 time. The form that survived moves a helper only below an undecorated top-level caller, with nothing but defs, classes
 and literal assignments in between. That gives 345 sites in 178 files and is about 420 lines. Of the 20 sampled sites
 that pass the safety rules, 9 were not plainly right. 49 of the 178 changed files end in mixed order, a moved helper
-beside ones that must stay. In a strip test it restores brash's own layout for 12 of 42 helpers, and on brash as it
-stands it fires nowhere.
+beside ones that must stay.
 
-**Why shelved.** The safety rules leave so much alone that it cannot hold the convention even where a project wants
-it: a quarter of the files it touches stay out of order, and every move costs a wide diff and lost blame.
-`method-order`,
-the same rule inside a class, was not run on its own. Confidence 0.85.
+**Second round.** Three families of variants were measured: where a moved helper lands, which helpers move, and which
+settings a project could turn. They were judged on the four corpus projects that hold the convention, by the share of
+helpers already below a caller: brash and tox (100%), pip-tools (80%) and attrs (71%). No other project is above 56%.
+The test lifts one helper to just above its first caller and asks whether the rule puts it back exactly where its
+authors had it. The best rule was then attacked.
 
-**Reopen if** a project that holds the convention grades the sample against its own rule and finds the moves right.
+| Rule                                    | brash, of 45 | tox, of 201 | pip-tools, of 28 | attrs, of 5 |
+| --------------------------------------- | ------------ | ----------- | ---------------- | ----------- |
+| The first round's rule                  | 10           | 74          | 10               | 2           |
+| With the sibling join                   | 15           | 128         | 11               | 3           |
+| And quiet classes                       | 15           | 136         | 11               | 3           |
+| And `safe-decorators`, the candidate    | 17           | 147         | 10               | 3           |
+
+- **The sibling join is the gain.** Where the first caller already has helpers below it, the moved helper joins them
+  in the order the caller first uses them. Where it has none, the helper lands directly below the caller, as before.
+- **Quiet classes.** A class counts as a caller when making it provably runs none of its methods: no base, keyword or
+  decorator, and a body of docstrings, literal assignments and plain methods.
+- **One setting earned its place.** `safe-decorators` lists decorators the project vouches do not call what they
+  decorate, so a def under them counts as a caller. tox would set `pytest.*` and brash `click.*`. It is an assertion,
+  and a wrong entry cannot be detected.
+- **Settings measured and dropped.** Landing below the public names suits brash by two helpers (19 against 17) and
+  costs tox 21 (126 against 147). Moving only single-caller helpers costs tox 41 (147 to 106), because tox stands
+  shared helpers below the first caller. Keeping a run of adjacent helpers together cuts the repair of a fully drifted
+  brash from 36 of 45 helpers to 9, since one helper that cannot move freezes its run. A minimum distance, a
+  whole-module switch, a tests switch and vouched base classes each moved three helpers or fewer.
+- **The ceiling is the authors.** With every safety rule off, the best placement rule still restores only 26 of 45
+  in brash. Sibling order in brash is not call order in `general_params`, `type_aliases` and `config`, and pip-tools
+  orders breadth-first. No rule read from the module reproduces a layout its authors did not follow.
+- **A helper drifted to the top of the module mostly stays there.** The candidate restores 2 of 45 in brash and 85 of
+  201 in tox, because a `re.compile` or `frozenset` constant stands between and cannot be crossed safely.
+- **The first round's safety rules had four holes.** A lambda in a default that is called at once, a helper named in a
+  string annotation that a decorator reads, an attribute lookup on the module object, and a string equal to the
+  helper's name. A wider fuzz found 98 run-time differences in 3,217 modules under the old rules, and none in 6,511
+  under the candidate. Three risks have no decidable exclusion: line numbers read back, another module reading the
+  helper mid-import, and a computed name.
+- **On code as written** the candidate moves nothing in brash or tox, 4 helpers in pip-tools and 1 in attrs, all of
+  which do stand above their callers. On the corpus it moves 386 helpers in 203 files and leaves 45 of them in mixed
+  order. A second run changes nothing, also after ruff. It is about 950 lines.
+- **Sample.** Of 44 graded moves, 28 were right, 11 debatable and 5 worse. In projects that do not hold the convention
+  it was 13, 6 and 5 of 24. Nine of the 11 not right there are a shared helper wedged below the first of many callers,
+  which is tox's own style, so no rule excludes it without losing tox. Of 14 single-caller moves, 12 were right and
+  none worse.
+- **A check that moves nothing sees the drift.** Reporting a helper that stands above every caller catches 276 of 278
+  simulated drifts and reports nothing on brash or tox as written. brash cannot fail a check without a diff.
+
+**Why shelved.** A drifted helper in brash comes back exactly 17 times in 45. It is put where the authors did not have
+it 11 times, and left where it drifted 17 times, while `brash --check` passes. That is wrong at some sites in a project
+that wants the convention, with no rule to tell which. tox reaches 73%. `method-order`, the same rule inside a class,
+was not run on its own. Confidence 0.72.
+
+**Open decisions.**
+
+- Whether the bar is the authors' exact layout, or any layout with the helper below a caller. On the second reading
+  the candidate is buildable as an opt-in: after one helper drifts it leaves 28 of 45 below a caller in brash and 170
+  of 201 in tox.
+- Whether brash should report without rewriting. It is the only form that catches nearly all drift, and it changes
+  `brash.command.Command` and the command's output.
+- Whether one codemod may have settings. `[tool.brash.settings.<name>]` was prototyped and no valid configuration
+  changed meaning, but it is new surface for one unprovable setting.
+- Whether AGENTS.md should say what order sibling helpers stand in. brash's own files disagree with any single rule.
+
+**Reopen if** either of the first two decisions goes its way.
 
 ### typed-fixtures
 
