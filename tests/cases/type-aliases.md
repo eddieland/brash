@@ -127,6 +127,18 @@ Key = Union[str, Optional[int], list["Row"]]
 type Key = Union[str, Optional[int], list["Row"]]
 ```
 
+### Union and optional of literals
+
+```python
+Mode = Union[Literal["r", "w"], Literal["a"]]
+Maybe = Optional[Literal["on", "off"]]
+```
+
+```python
+type Mode = Union[Literal["r", "w"], Literal["a"]]
+type Maybe = Optional[Literal["on", "off"]]
+```
+
 ### Keeps comments and layout
 
 ```python
@@ -322,6 +334,7 @@ Rows = Row | typing.Optional['Row']
 ### Quoted member of a union alias
 
 ```python
+Mixed = Union[Literal["r"], "Text"]
 Node = Union["Node", int]
 Found = Optional["Row"]
 ```
@@ -330,6 +343,7 @@ Found = Optional["Row"]
 
 ```python
 Row = Union[records.Run]
+Mode = Union[Literal["r"]]
 ```
 
 ### Union or optional read at run time
