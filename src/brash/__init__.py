@@ -1,11 +1,12 @@
 """brash: codemods that hold a Python codebase to its conventions, applied to files or checked against them.
 
 `brash PATHS` rewrites the Python under the paths with every codemod there is, brash's own in `registry.CODEMODS` and
-those the project registers in its `pyproject.toml` or `brash.toml`, but for any it turns off there, leaving alone the
-files its `exclude` there names, and `--check` changes nothing: it prints the diff each would make and fails when there
-is one, which is how a lint holds a repository to them. A codemod is a `libcst.codemod` command, so it keeps every
-comment and blank line it does not touch. A project that runs on a Python older than a codemod's output needs says so
-with `target-version` there, or `--target-version` here, and that codemod does not run. The README says how to add one.
+those the project registers in its `pyproject.toml` or `brash.toml`, but for any it turns off there, for every file or
+in its `per-file-ignores` for some, leaving alone the files its `exclude` there names, and `--check` changes nothing:
+it prints the diff each would make and fails when there is one, which is how a lint holds a repository to them. A
+codemod is a `libcst.codemod` command, so it keeps every comment and blank line it does not touch. A project that
+runs on a Python older than a codemod's output needs says so with `target-version` there, or `--target-version` here,
+and that codemod does not run. The README says how to add one.
 """
 
 from __future__ import annotations
@@ -77,7 +78,8 @@ def main(
     if not paths:
         raise click.UsageError("Give the files or directories to rewrite.")
     found = [path for path in run.files(paths) if not project.excludes(path)]
-    rewrites = run.rewrite_all(found, chosen, codemods)
+    ignored = {path: names for path in found if (names := project.ignored(path))}
+    rewrites = run.rewrite_all(found, chosen, codemods, ignored)
     failed = [rewrite for rewrite in rewrites if rewrite.error is not None]
     changed = [rewrite for rewrite in rewrites if rewrite.changed]
     for rewrite in failed:
@@ -106,7 +108,7 @@ def _registered(names: Collection[str], target: str | None) -> tuple[Project, di
 
     Raises:
         click.ClickException: When the project's configuration is not one brash takes, registers a codemod that
-            cannot be loaded, or selects or ignores one there is not.
+            cannot be loaded, or selects or ignores one there is not, for every file or for some.
         click.BadParameter: When `--only` names no codemod.
     """
     try:
