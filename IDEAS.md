@@ -36,6 +36,8 @@ entry, and its PR says how the numbers it relies on were checked again, or that 
 4. **Extend `general-params` with star-unpacking and `tuple[X, ...]`.** After the third defect of step 1, since both
    rest on the named-as-a-value rule. Then look again at the optional-collections rider, which is 40 lines on top
    and waits on decision C.
+   - [x] Done: `*p`, `**p` and `tuple[X, ...]`. See "Built" in its entry.
+   - [ ] The optional-collections rider, in a PR of its own, with decision C.
 5. **Build `explicit-override`, off by default.** After step 2. It is sound, with no wrong site and no new
    diagnostic, but only 3 of 30 projects use `@override`, it cannot fire on brash's own code, and its tester gave it
    0.6.
@@ -61,7 +63,7 @@ agent's judgement: each is decided in the PR of the step it blocks, with the rea
 | | Decision | Blocks | The evidence suggests | Decided |
 | --- | --- | --- | --- | --- |
 | A | Does the named-as-a-value rule apply to all of `general-params`, removing 49 of its 417 corpus sites? | Steps 1 and 4 | Yes: the typer case is a real break, and one rule for the whole codemod is consistent | Yes, for the whole codemod |
-| B | Was "unpacked" left alone in `general-params` on purpose? | Step 4 | Unknown; 78 of 82 sampled rewrites were right | |
+| B | Was "unpacked" left alone in `general-params` on purpose? | Step 4 | Unknown; 78 of 82 sampled rewrites were right | A star is a pass, and counts; unpacking by an assignment is still left alone |
 | C | Is the pinned "Optional" case in `tests/cases/general-params.md` spelling or intent? | The rider in step 4 | Unknown | |
 | D | May a codemod remove an import it orphans? | Step 7 | Needed: without it 31 of 66 files end with an unused import | |
 | E | May brash edit `__doc__`? | Step 7, and the docstring family | Only as opt-in; no corpus break was found, three were constructed | |
@@ -402,6 +404,24 @@ def run(args: Iterable[str], env: Mapping[str, str]) -> None:
   blind spot and remains one.
 
 **Size.** An extension of `general_params.py`.
+
+**Built** in `src/brash/general_params.py`, about 60 lines, from this entry and not from the prototype, which was not
+kept. Three things differ from the entry, each the smaller form:
+
+- `*p` in a subscript, `x[*p]`, is left alone: it is a tuple display only by its syntax tree.
+- `tuple[(X, ...)]`, with its own parentheses inside the brackets, is left alone as the commented one is.
+- `in` on a tuple gives `Collection`, as on a list; `AbstractSet` stays for a `set` and a `frozenset`.
+
+Decision B is decided so: "unpacked" in the parent's docstring meant unpacking by an assignment, `a, b = p`, which
+fixes a length and is still left alone. A star takes each item once, which is a pass.
+
+Checked again on the current sdists of the 30 projects, 7,424 files that parse: 368 sites in 200 files before, 525 in
+272 after, so 157 new sites in 100 files, 113 of them in tests and 70 in tox, as above. 79 are tuples and 78 are
+stars. Every rewritten file parses, and a second run changes nothing. The 44 sites outside tests were listed and
+skimmed, not graded again, and the three type checkers were not run again.
+
+It fires once on brash's own code: `_directed(lines: tuple[str, ...])` in `empty_collections.py`, which indexes
+`lines`, now takes a `Sequence[str]`.
 
 **Open decisions.**
 

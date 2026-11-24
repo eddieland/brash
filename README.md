@@ -221,13 +221,17 @@ The hook runs in an environment of its own, which holds brash and nothing of you
   from the name. It cannot tell what a name is from why the code is so, so a note of the second kind is written with
   a blank line below it, or beside the value. The colon can push a line past the line length, which the lint then
   reports.
-- **`general-params`** widens a parameter annotated `list`, `dict`, `set`, or `frozenset` that its function only
-  reads to the most general type its reads need: `def total(costs: list[float])` whose body only sums `costs` becomes
-  `def total(costs: Iterable[float])`. One pass is `Iterable`; `len`, `in`, a truth test, or more than one pass is
-  `Collection`; indexing, slicing, or `reversed` of a list is `Sequence`; a dict only read is `Mapping`; and a set
-  tested with `in` is `AbstractSet`, never `Collection`. It is deliberately narrow, since a wrong widening fails the
-  type checker at a call site: it leaves alone a parameter used in any way it does not know to be a read (mutated,
-  stored, returned, yielded, compared, or passed to any call but a few builtins whose names the module does not bind),
+- **`general-params`** widens a parameter annotated `list`, `dict`, `set`, `frozenset`, or `tuple[X, ...]` that its
+  function only reads to the most general type its reads need: `def total(costs: list[float])` whose body only sums
+  `costs` becomes `def total(costs: Iterable[float])`. One pass is `Iterable`, and a star is one pass: `*p` among a
+  call's arguments or in a list, tuple, or set display. `len`, `in`, a truth test, or more than one pass is
+  `Collection`; indexing, slicing, or `reversed` of a list or a tuple is `Sequence`; a dict only read, `**p` among a
+  call's arguments or in a dict display included, is `Mapping`; and a set tested with `in` is `AbstractSet`, never
+  `Collection`. It is deliberately narrow, since a wrong widening fails the type checker at a call site: it leaves
+  alone a parameter used in any way it does not know to be a read (mutated, stored, returned, yielded, compared,
+  unpacked by an assignment, or passed to any call but a few builtins whose names the module does not bind), so a
+  tuple used as a tuple, hashed, used as a key, or concatenated, stays one, as does a tuple of a fixed length; it
+  also leaves alone
   one bound again or named by a nested function, one never read, one whose function returns the type it takes, every
   parameter of a function with a decorator but a few plain ones (a click command, an override), every parameter of a
   function the module names other than to call it (`typer.run(main)`, `Thread(target=self.run)`), since what takes the

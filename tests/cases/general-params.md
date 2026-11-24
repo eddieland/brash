@@ -526,6 +526,192 @@ class Report:
         return total([1.0]) + self.lines(["a"])
 ```
 
+### Starred into a call
+
+```python
+def show(names: list[str]) -> None:
+    print(*names, sep=", ")
+```
+
+```python
+from collections.abc import Iterable
+
+def show(names: Iterable[str]) -> None:
+    print(*names, sep=", ")
+```
+
+### Starred into a display
+
+```python
+def command(args: list[str], flags: set[str], extra: list[str]) -> tuple[list[str], set[str], tuple[str, ...]]:
+    return ["tox", *args], {"-q", *flags}, (*extra, "--")
+```
+
+```python
+from collections.abc import Iterable
+
+def command(args: Iterable[str], flags: Iterable[str], extra: Iterable[str]) -> tuple[list[str], set[str], tuple[str, ...]]:
+    return ["tox", *args], {"-q", *flags}, (*extra, "--")
+```
+
+### Starred in a loop
+
+```python
+def show(names: list[str], times: int) -> None:
+    for _ in range(times):
+        print(*names)
+```
+
+```python
+from collections.abc import Collection
+
+def show(names: Collection[str], times: int) -> None:
+    for _ in range(times):
+        print(*names)
+```
+
+### A dict spread into a call
+
+```python
+def make(options: dict[str, int]) -> object:
+    return build(**options)
+```
+
+```python
+from collections.abc import Mapping
+
+def make(options: Mapping[str, int]) -> object:
+    return build(**options)
+```
+
+### A dict spread into a display
+
+```python
+def merged(base: dict[str, str], more: dict[str, str]) -> dict[str, object]:
+    return {**base, "mode": "strict", **more}
+```
+
+```python
+from collections.abc import Mapping
+
+def merged(base: Mapping[str, str], more: Mapping[str, str]) -> dict[str, object]:
+    return {**base, "mode": "strict", **more}
+```
+
+### A dict's keys starred
+
+```python
+def keys(row: dict[str, int]) -> list[str]:
+    return [*row]
+```
+
+```python
+from collections.abc import Mapping
+
+def keys(row: Mapping[str, int]) -> list[str]:
+    return [*row]
+```
+
+### A tuple of any length
+
+```python
+def total(costs: tuple[float, ...]) -> float:
+    return sum(costs)
+```
+
+```python
+from collections.abc import Iterable
+
+def total(costs: Iterable[float]) -> float:
+    return sum(costs)
+```
+
+### A tuple starred, and a dict spread
+
+```python
+import os
+import subprocess
+
+
+def run(args: tuple[str, ...], env: dict[str, str]) -> None:
+    subprocess.run(["tox", *args], env={**os.environ, **env}, check=True)
+```
+
+```python
+import os
+import subprocess
+from collections.abc import Iterable, Mapping
+
+
+def run(args: Iterable[str], env: Mapping[str, str]) -> None:
+    subprocess.run(["tox", *args], env={**os.environ, **env}, check=True)
+```
+
+### A tuple measured, and one searched
+
+```python
+def known(name: str, names: tuple[str, ...], seen: tuple[str, ...]) -> bool:
+    return len(names) > 1 and name in seen
+```
+
+```python
+from collections.abc import Collection
+
+def known(name: str, names: Collection[str], seen: Collection[str]) -> bool:
+    return len(names) > 1 and name in seen
+```
+
+### A tuple indexed, sliced, and counted
+
+```python
+def first(items: tuple[str, ...], rest: tuple[str, ...], votes: tuple[str, ...]) -> tuple[str, int, int]:
+    return items[0], len(rest[1:]), votes.count("yes")
+```
+
+```python
+from collections.abc import Sequence
+
+def first(items: Sequence[str], rest: Sequence[str], votes: Sequence[str]) -> tuple[str, int, int]:
+    return items[0], len(rest[1:]), votes.count("yes")
+```
+
+### A tuple of tuples, spaced in its brackets
+
+```python
+def total(pairs: tuple[ tuple[int, str] , ... ]) -> int:
+    return sum(number for number, _ in pairs)
+```
+
+```python
+from collections.abc import Iterable
+
+def total(pairs: Iterable[ tuple[int, str] ]) -> int:
+    return sum(number for number, _ in pairs)
+```
+
+### A tuple over lines
+
+```python
+def total(
+    costs: tuple[
+        float,
+        ...,
+    ],
+) -> float:
+    return sum(costs)
+```
+
+```python
+from collections.abc import Iterable
+
+def total(
+    costs: Iterable[
+        float
+    ],
+) -> float:
+    return sum(costs)
+```
+
 ## Left alone
 
 ### Mutated
@@ -912,4 +1098,172 @@ class Totals(Base):
     if sys.version_info >= (3, 12):
         def total(self, costs: list[float]) -> float:
             return sum(costs)
+```
+
+### A tuple of a fixed length
+
+```python
+def total(pair: tuple[float, float], one: tuple[float], none: tuple[()]) -> float:
+    return sum(pair) + sum(one) + len(none)
+```
+
+### A tuple of a type variable tuple
+
+```python
+def count[*Ts](items: tuple[*Ts]) -> int:
+    return len(items)
+```
+
+### A tuple unpacked by an assignment
+
+```python
+def first(items: tuple[str, ...], pair: list[str]) -> str:
+    head, *_ = items
+    left, _right = pair
+    return head + left
+```
+
+### A tuple matched
+
+```python
+def kind(items: tuple[str, ...]) -> str:
+    match items:
+        case ():
+            return "none"
+        case _:
+            return "some"
+```
+
+### A tuple hashed, and one used as a key
+
+```python
+def cached(key: tuple[str, ...], other: tuple[str, ...], cache: Cache) -> int:
+    return hash(key) + cache[other]
+```
+
+### A tuple concatenated
+
+```python
+def longer(items: tuple[str, ...]) -> int:
+    return len(items + ("last",))
+```
+
+### A tuple formatted with %
+
+```python
+def show(items: tuple[str, ...]) -> str:
+    return "%s and %s" % items
+```
+
+### A tuple compared
+
+```python
+def empty(items: tuple[str, ...]) -> bool:
+    return items == ()
+```
+
+### A tuple given to isinstance, and one to startswith
+
+```python
+def check(value: object, kinds: tuple[type, ...], name: str, prefixes: tuple[str, ...]) -> bool:
+    return isinstance(value, kinds) and name.startswith(prefixes)
+```
+
+### A tuple that catches
+
+```python
+def attempt(errors: tuple[type[Exception], ...]) -> bool:
+    try:
+        work()
+    except errors:
+        return False
+    return True
+```
+
+### A tuple with a comment inside its brackets
+
+```python
+def total(
+    costs: tuple[
+        float,  # in pounds
+        ...,
+    ],
+) -> float:
+    return sum(costs)
+```
+
+### A tuple with parentheses inside its brackets
+
+```python
+def total(costs: tuple[(float, ...)]) -> float:
+    return sum(costs)
+```
+
+### A tuple quoted, and one optional
+
+```python
+def total(costs: "tuple[float, ...]", more: tuple[float, ...] | None) -> float:
+    return sum(costs) + sum(more or ())
+```
+
+### A tuple of a function named as a value
+
+```python
+from functools import lru_cache
+
+
+def _total(costs: tuple[float, ...]) -> float:
+    return sum(costs)
+
+
+total = lru_cache(maxsize=1024)(_total)
+```
+
+### Starred among a class's bases
+
+```python
+def make(bases: list[type]) -> type:
+    class Made(*bases):
+        pass
+
+    return Made
+```
+
+### Starred in a subscript
+
+```python
+def cell(grid: Grid, at: list[int]) -> int:
+    return grid[*at]
+```
+
+### Starred into a call, and stored
+
+```python
+def show(names: list[str], log: Log) -> None:
+    print(*names)
+    log.names = names
+```
+
+### Yielded from
+
+```python
+from collections.abc import Iterator
+
+
+def each(names: list[str]) -> Iterator[str]:
+    yield from names
+```
+
+### A list spread by two stars
+
+```python
+def make(options: list[str]) -> object:
+    return build(**options)
+```
+
+### A dict as a display's value
+
+```python
+def wrap(row: dict[str, int]) -> dict[str, dict[str, int]]:
+    return {"row": row}
 ```

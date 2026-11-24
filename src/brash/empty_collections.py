@@ -58,7 +58,7 @@ from brash.command import Command
 from brash.final_constants import last_name
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator, Mapping
+    from collections.abc import Iterable, Iterator, Mapping, Sequence
     from collections.abc import Set as AbstractSet
 
     from libcst.codemod import CodemodContext
@@ -272,7 +272,7 @@ def _generator(function: ast.FunctionDef | ast.AsyncFunctionDef, parents: Mappin
     )
 
 
-def _directed(lines: tuple[str, ...], numbers: Iterable[int]) -> bool:
+def _directed(lines: Sequence[str], numbers: Iterable[int]) -> bool:
     """Whether any of some lines has a type checker's or a lint's directive.
 
     Returns:
