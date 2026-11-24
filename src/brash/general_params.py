@@ -53,7 +53,7 @@ from brash.command import Command
 from brash.final_constants import last_name
 
 if TYPE_CHECKING:
-    from collections.abc import Collection, Mapping, Sequence
+    from collections.abc import Collection, Iterable, Mapping, Sequence
     from collections.abc import Set as AbstractSet
 
     from libcst.codemod import CodemodContext
@@ -604,7 +604,7 @@ def _repeated(
     return False
 
 
-def _choose(head: str, reads: Sequence[_Read]) -> str | None:
+def _choose(head: str, reads: Collection[_Read]) -> str | None:
     """The most general type a concrete one can become, given every read of the parameter.
 
     Returns:
@@ -654,7 +654,7 @@ def _type_checking(module: cst.Module) -> cst.If | None:
     return None
 
 
-def _with_imports(block: cst.If, names: Sequence[str]) -> cst.If:
+def _with_imports(block: cst.If, names: Iterable[str]) -> cst.If:
     """A `TYPE_CHECKING` block with an import of each abstract type named first in it; ruff then sorts it in.
 
     Returns:
