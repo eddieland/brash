@@ -37,7 +37,7 @@ entry, and its PR says how the numbers it relies on were checked again, or that 
    rest on the named-as-a-value rule. Then look again at the optional-collections rider, which is 40 lines on top
    and waits on decision C.
    - [x] Done: `*p`, `**p` and `tuple[X, ...]`. See "Built" in its entry.
-   - [ ] The optional-collections rider, in a PR of its own, with decision C.
+   - [x] The optional-collections rider, with decision C decided as spelling. See "Built" in its entry.
 5. **Build `explicit-override`, off by default.** After step 2. It is sound, with no wrong site and no new
    diagnostic, but only 3 of 30 projects use `@override`, it cannot fire on brash's own code, and its tester gave it
    0.6.
@@ -64,7 +64,7 @@ agent's judgement: each is decided in the PR of the step it blocks, with the rea
 | --- | --- | --- | --- | --- |
 | A | Does the named-as-a-value rule apply to all of `general-params`, removing 49 of its 417 corpus sites? | Steps 1 and 4 | Yes: the typer case is a real break, and one rule for the whole codemod is consistent | Yes, for the whole codemod |
 | B | Was "unpacked" left alone in `general-params` on purpose? | Step 4 | Unknown; 78 of 82 sampled rewrites were right | A star is a pass, and counts; unpacking by an assignment is still left alone |
-| C | Is the pinned "Optional" case in `tests/cases/general-params.md` spelling or intent? | The rider in step 4 | Unknown | |
+| C | Is the pinned "Optional" case in `tests/cases/general-params.md` spelling or intent? | The rider in step 4 | Unknown | Spelling: it stands among the cases of an annotation spelled another way, beside Quoted and Bare |
 | D | May a codemod remove an import it orphans? | Step 7 | Needed: without it 31 of 66 files end with an unused import | |
 | E | May brash edit `__doc__`? | Step 7, and the docstring family | Only as opt-in; no corpus break was found, three were constructed | |
 | F | Do `mock-namespace` and `lazy-logging` ship in brash, off by default, or stay a project's own? | Nothing yet | Not before step 2 | |
@@ -172,7 +172,7 @@ running it by default, not against building it as opt-in.
 | `explicit-override` | New | Build | `@override` where the base class is in the same module | 775 sites, 0 wrong, no new diagnostics |
 | Star-unpacking and `tuple[X, ...]` | `general-params` | Build | Counts `*p` and `**p` as reads; widens `tuple[X, ...]` | 157 sites, 78 of 82 right |
 | `Union[...]` and `Optional[...]` aliases | `type-aliases` | Rider | Takes an alias ruff reports and cannot fix | 59 of 59 right, about 12 lines, but 59 sites |
-| Optional collections | `general-params` | Rider | Widens `list[X] \| None` | 27 of 31 right, but 31 sites and undoes a pinned case |
+| Optional collections | `general-params` | Rider | Widens `list[X] \| None` | 27 of 31 right, but 31 sites; built after its parent, the pinned case judged spelling |
 | `sorted-sets` | New | Shelved | Sorts a set display's elements | 12 of 64 destroyed a meaningful order |
 | `single-with` | New | Shelved | Merges nested `with` statements | ruff's fix already does 81% at 120 columns |
 | `self-returns` | New | Shelved | `-> Self` on a method that returns `self` | 8 wrong sites; 3 new mypy errors in jinja2 |
@@ -480,6 +480,31 @@ rewrite as left alone.
 **Size.** About 40 lines on top of the star-unpacking extension.
 
 **Reopen if** the star-unpacking extension is built and the pinned case is judged a matter of spelling, not intent.
+
+**Built** in `src/brash/general_params.py`, about 45 lines, from this entry and not from the prototype, which was not
+kept. Both conditions above hold: the extension is built, and decision C is decided as spelling. The pinned case came
+in with the codemod, among the cases of an annotation spelled another way, between "Quoted" and "Bare", and the
+codemod's docstring listed "a union" in that same sentence; nothing in either says an optional collection is meant to
+stay concrete. The case is now under Rewritten. Four things are the smaller form:
+
+- Only `X | None` is read. `None | X`, `Optional[X]`, a quoted union and a union of more members are left alone.
+- `p or other` is read as `p` only where something follows `p` in it. Last, as in `other or p`, it has no default
+  and is left alone, as is `p and other`.
+- A parameter only compared with `None` is left alone, as one never read is: no read says what it needs.
+- A function that returns the parameter's type, with or without its `| None`, is left alone.
+
+A test of an optional parameter's truth, `if p:`, still gives `Collection`, as it does where the parameter is not
+optional. `p or other` asks for no more than what reads it does, so `sum(costs or [])` gives `Iterable`, as above.
+
+Checked again on the current sdists of the 30 projects, 7,423 files that parse, 609 parameters spelled `X | None`: 525
+sites in 272 files before, 557 in 286 after, so 32 new sites in 25 files, 16 of them in tests. 13 become `Iterable`,
+9 `Mapping`, 6 `AbstractSet` and 4 `Collection`. Every rewritten file parses, and a second run changes nothing. All
+32 were read with the lines that use the parameter, and each is only read there; none is one of the litestar
+constructors above, and the 4 that become `Collection` include 2 sets, in black and pip-tools, which then admit a
+bare `str`, as a set that is not optional does. The three type checkers were not run on the corpus again; pyrefly
+reports nothing new on the 12 rewritten cases.
+
+It does not fire on brash's own code.
 
 ## Opt-in
 
