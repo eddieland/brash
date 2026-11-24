@@ -204,8 +204,10 @@ The hook runs in an environment of its own, which holds brash and nothing of you
   union of types. A `type` statement makes a `TypeAliasType`, not the type it names, so it leaves alone a name the
   module reads outside an annotation (passed to `get_args` or `isinstance`, called, subclassed, held in another
   assignment); an `Annotated[...]` alias, whose metadata frameworks read as the program runs; and a union that may be
-  of values, with no `None`, subscript, or builtin type in it. It sees one module at a time: where another module
-  reads a rewritten alias at run time, that reader takes its `__value__`. The `type` statement is Python 3.12's, so
+  of values, with no `None`, subscript, or builtin type in it. It leaves alone an alias with a quoted name as a member
+  of a `Union[...]` or `Optional[...]`, since ruff then writes `str | "Text"`, which raises when the alias is read. It
+  sees one module at a time: where another module reads a rewritten alias at run time, that reader takes its
+  `__value__`. The `type` statement is Python 3.12's, so
   it does not run in a project whose [`target-version`](#configuration) is older.
 - **`doc-comments`** writes the comment directly above a name as a Sphinx doc comment, which editors and doc tools
   attach to the name: `# How often a run is resumed.` above `MAX_RESUMES: Final = 3` becomes

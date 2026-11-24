@@ -18,7 +18,7 @@ entry, and its PR says how the numbers it relies on were checked again, or that 
 
 1. **Fix the defects in the codemods brash ships.** They write wrong code in projects today, the fixes are known and
    each is a few lines with a case. See "Defects found in the existing codemods".
-   - [ ] `type-aliases`: leave alone an alias with a quoted name directly inside a `Union` or `Optional`. First,
+   - [x] `type-aliases`: leave alone an alias with a quoted name directly inside a `Union` or `Optional`. First,
      because the result raises at run time, and two corpus aliases hit it.
    - [ ] `general-params`: check the slice's parent for a shadowed builtin, not only the parameter's own.
    - [ ] `general-params`: leave alone a function the module names as a value. This one waits on decision A below,
@@ -417,8 +417,8 @@ rewritten and 8 kept.
 
 **Size.** About 12 lines in `_is_alias`.
 
-**Reopen if** the rate bar is judged not to apply to one more entry in a table. The quoted-member guard is worth taking
-into the parent whatever is decided; see the defects section.
+**Reopen if** the rate bar is judged not to apply to one more entry in a table. The quoted-member guard it needs is in the
+parent already, as the fix of the first defect.
 
 ### general-params: optional collections
 
@@ -754,12 +754,12 @@ The scout that found the two extensions above also measured these and dropped th
 ## Defects found in the existing codemods
 
 Three defects in codemods brash already ships turned up during testing. All three were reproduced against the current
-code. None has been fixed or filed.
+code. The first is fixed; the other two are not, nor filed.
 
-- [ ] **`type-aliases` and ruff together write an alias that raises.** `HighlighterType = Callable[[Union[str, "Text"]],
+- [x] **`type-aliases` and ruff together write an alias that raises.** `HighlighterType = Callable[[Union[str, "Text"]],
   "Text"]` becomes a `type` statement, and ruff's safe UP007 fix then writes `Callable[[str | "Text"], "Text"]`. Reading
   `__value__` raises `TypeError`. Two corpus aliases hit it: `rich/console.py:68` and `aiohttp/web_urldispatcher.py:86`.
-  Fix: leave alone an alias with a quoted name directly inside a `Union` or `Optional`, at any depth.
+  Fixed by leaving alone an alias with a quoted name directly inside a `Union` or `Optional`, at any depth.
 - [ ] **`general-params` misses a shadowed builtin around a slice.** With `from mylib import sorted`, it correctly
   leaves `len(sorted(items))` alone but widens `items: list[str]` to `Sequence[str]` in `len(sorted(items[1:]))`.
   `_shadowed` checks the parameter's own parent, not the slice's.

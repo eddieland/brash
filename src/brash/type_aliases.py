@@ -13,6 +13,8 @@ when the program runs, so the rewrite is kept to where that cannot show. It leav
 - an `Annotated[...]` alias, whose metadata frameworks read at run time, and any other subscript (`dict[str, int]`),
   which may be a class the module calls;
 - a union that may be arithmetic on values: one with no `None`, no subscript, and no builtin type among its members;
+- an alias with a quoted name as a member of a `Union[...]` or `Optional[...]`, at any depth. ruff's fix for those
+  writes `str | "Text"`, which raises once the `type` statement's value is read;
 - a generic alias, one that names a `TypeVar` the module declares, which a `type` statement spells another way;
 - a name the module binds again, an `UPPER_CASE` name, which is a constant (`final-constants`), and an assignment
   nested in an `if`, `try`, or `with`.
@@ -42,6 +44,8 @@ from brash.final_constants import CONSTANT, DECLARES, Bindings, last_name
 ASSIGNED: Final = re.compile(r"^_*[A-Z]\w*[ \t]*=[^=]", re.MULTILINE)
 #: The subscripts taken as an alias whatever they hold, by the last name of what is subscripted.
 HEADS: Final = frozenset({"Callable", "Literal", "tuple"})
+#: The subscripts ruff spells as a `|` union (UP007 and UP045), by the last name of what is subscripted.
+UNIONS: Final = frozenset({"Optional", "Union"})
 #: The builtin types whose presence in a union says it is a union of types, not arithmetic on values.
 BUILTINS: Final = frozenset({"bool", "bytes", "complex", "dict", "float", "int", "list", "object", "set", "str"})
 #: Who reads a name when it is not another alias: the program as it runs.
@@ -221,7 +225,7 @@ def _is_alias(name: str, value: ast.expr) -> bool:
     Returns:
         True for a `CamelCase` name given a `Literal`, `tuple`, or `Callable`, or a union that is one of types.
     """
-    if not name.lstrip("_")[:1].isupper() or CONSTANT.fullmatch(name):
+    if not name.lstrip("_")[:1].isupper() or CONSTANT.fullmatch(name) or _quotes_a_union_member(value):
         return False
     match value:
         case ast.Subscript(value=head):
@@ -230,6 +234,20 @@ def _is_alias(name: str, value: ast.expr) -> bool:
             return _is_type(value) and any(_marks_a_union(member) for member in _members(value))
         case _:
             return False
+
+
+def _quotes_a_union_member(value: ast.expr) -> bool:
+    """Whether a `Union[...]` or `Optional[...]` anywhere in an expression has a quoted name as a member.
+
+    Returns:
+        True when one has: `Union[str, "Text"]`, but not `Union[str, list["Text"]]`.
+    """
+    return any(
+        isinstance(member, ast.Constant) and isinstance(member.value, str)
+        for node in ast.walk(value)
+        if isinstance(node, ast.Subscript) and last_name(node.value) in UNIONS
+        for member in (node.slice.elts if isinstance(node.slice, ast.Tuple) else [node.slice])
+    )
 
 
 def _members(union: ast.expr) -> list[ast.expr]:
