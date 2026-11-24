@@ -23,7 +23,7 @@ entry, and its PR says how the numbers it relies on were checked again, or that 
    - [x] `general-params`: check the slice's parent for a shadowed builtin, not only the parameter's own.
    - [ ] `general-params`: leave alone a function the module names as a value. This one waits on decision A below,
      because it changes what the codemod rewrites today.
-   - [ ] brash's own two parameters, `_choose` and `_with_imports`. Trivial, and by hand.
+   - [x] brash's own two parameters, `_choose` and `_with_imports`. Trivial, and by hand.
 2. **Let a codemod be off by default.** `extend-select` exists since #12, so a project can already name a codemod to
    run as well. What is missing is the other half: a codemod that says it does not run unless `select` or
    `extend-select` names it, as `MINIMUM_PYTHON` says what it needs. It is small, it unblocks steps 5 and 7, and it
@@ -769,10 +769,10 @@ code. The first two are fixed; the third is not, nor filed.
   named-as-a-value rule from the star-unpacking extension would close this.
 
 One more finding is about brash's own code, not a codemod. Two parameters in `src/brash/general_params.py` take more
-than they read, by the AGENTS.md rule:
+than they read, by the AGENTS.md rule. Both are widened now:
 
-- [ ] `_choose(head, reads: Sequence[_Read])` needs only `Collection`.
-- [ ] `_with_imports(block, names: Sequence[str])` needs only `Iterable`.
+- [x] `_choose(head, reads: Sequence[_Read])` needs only `Collection`.
+- [x] `_with_imports(block, names: Sequence[str])` needs only `Iterable`.
 
 For scale, the existing codemods fire on the corpus as follows: `final-constants` 2,260 sites in 836 files,
 `doc-comments` 898 comment lines in 290, `general-params` 417 in 220, `type-aliases` 189 in 116.
