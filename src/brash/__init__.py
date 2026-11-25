@@ -79,7 +79,7 @@ def main(
         raise click.UsageError("Give the files or directories to rewrite.")
     found = [path for path in run.files(paths) if not project.excludes(path)]
     ignored = {path: names for path in found if (names := project.ignored(path))}
-    rewrites = run.rewrite_all(found, chosen, codemods, ignored)
+    rewrites = run.rewrite_all(found, chosen, codemods, ignored, project.config)
     failed = [rewrite for rewrite in rewrites if rewrite.error is not None]
     changed = [rewrite for rewrite in rewrites if rewrite.changed]
     for rewrite in failed:

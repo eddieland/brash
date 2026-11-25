@@ -47,12 +47,20 @@ SHARED: Final = "pyproject.toml"
 CONFIGS: Final = (DEDICATED, SHARED)
 _ENTRY: Final = re.compile(r"[^\W\d]\w*(\.[^\W\d]\w*)*:[^\W\d]\w*")
 _TARGET: Final = re.compile(r"py3(\d{1,2})")
+_REFERENCE: Final = re.compile(r"[^\W\d]\w*(\.[^\W\d]\w*)+")
 
 
 def _module_and_class(entry: str) -> str:
     if not _ENTRY.fullmatch(entry):
         raise PydanticCustomError("codemod_entry", "`{entry}` is not a `module:Class`", {"entry": entry})
     return entry
+
+
+def _generic(reference: str) -> str:
+    if not _REFERENCE.fullmatch(reference):
+        problem = "`{reference}` is not a module and a name there, such as `numpy.typing.NDArray`"
+        raise PydanticCustomError("generic_reference", problem, {"reference": reference})
+    return reference
 
 
 def _target(target: str) -> str:
@@ -100,6 +108,13 @@ class Config(BaseModel):
 
     A pattern excludes the file or directory it matches, and everything under that directory. Its `*` matches any run
     of characters, slashes among them, so `*_pb2.py` excludes such a file at any depth.
+    """
+    extend_generics: tuple[Annotated[str, AfterValidator(_generic)], ...] = Field(default=(), alias="extend-generics")
+    """Generic types `type-aliases` takes as it takes the standard library's, each as its module and its name there.
+
+    With `numpy.typing.NDArray` here, `Grid = NDArray[np.float64]` is an alias to rewrite in a module that imports
+    `NDArray` from `numpy.typing`, under any name, or reaches it through an import of `numpy`. A type the module
+    imports from elsewhere, or does not import, is left alone, whatever its name.
     """
 
 
