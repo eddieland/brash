@@ -117,10 +117,14 @@ no-print = "codemods.no_print:NoPrint"
   matches, and everything under that directory. Its `*` matches any run of characters, slashes among them, so
   `*_pb2.py` excludes such a file at any depth and `top.py` only the one beside the `pyproject.toml`. An excluded
   file is left alone when it is named outright too, as a git hook names it.
-- **`extend-generics`** names generic types `type-aliases` takes as it takes the standard library's, such as
-  `extend-generics = ["NDArray"]`: your project's own, and those of the libraries it uses. Each is the name the type
-  is subscripted under, the last one before the bracket, so `NDArray` is also `npt.NDArray[np.float64]`. A dotted
-  name fails the run.
+- **`extend-generics`** names generic types `type-aliases` takes as it takes the standard library's: your project's
+  own, and those of the libraries it uses. Each is the type's module and its name there, as
+  `extend-generics = ["numpy.typing.NDArray"]`, and it is taken in a module that imports it from there: by name,
+  under another name, or through `import numpy as np` as `np.typing.NDArray`. brash reads the module's imports and
+  no other file, so a type that reaches the module by another path, re-exported from your own package, is named
+  under that path too, and one a `*` brings is left alone. A relative import gives only the end of a path, so
+  `from .tables import Table` is `app.tables.Table`. A type the module defines itself is not imported, and an alias
+  of it there is left alone. A name with no module fails the run.
 - **`codemods`** registers [your project's own codemods](#your-projects-own-codemods).
 
 A project that keeps each tool's settings in a file of its own has a `brash.toml` instead, with the same settings at

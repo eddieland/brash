@@ -47,7 +47,7 @@ SHARED: Final = "pyproject.toml"
 CONFIGS: Final = (DEDICATED, SHARED)
 _ENTRY: Final = re.compile(r"[^\W\d]\w*(\.[^\W\d]\w*)*:[^\W\d]\w*")
 _TARGET: Final = re.compile(r"py3(\d{1,2})")
-_NAME: Final = re.compile(r"[^\W\d]\w*")
+_REFERENCE: Final = re.compile(r"[^\W\d]\w*(\.[^\W\d]\w*)+")
 
 
 def _module_and_class(entry: str) -> str:
@@ -56,10 +56,11 @@ def _module_and_class(entry: str) -> str:
     return entry
 
 
-def _generic(name: str) -> str:
-    if not _NAME.fullmatch(name):
-        raise PydanticCustomError("generic_name", "`{name}` is not a name such as `NDArray`", {"name": name})
-    return name
+def _generic(reference: str) -> str:
+    if not _REFERENCE.fullmatch(reference):
+        problem = "`{reference}` is not a module and a name there, such as `numpy.typing.NDArray`"
+        raise PydanticCustomError("generic_reference", problem, {"reference": reference})
+    return reference
 
 
 def _target(target: str) -> str:
@@ -109,10 +110,11 @@ class Config(BaseModel):
     of characters, slashes among them, so `*_pb2.py` excludes such a file at any depth.
     """
     extend_generics: tuple[Annotated[str, AfterValidator(_generic)], ...] = Field(default=(), alias="extend-generics")
-    """Generic types `type-aliases` takes as it takes the standard library's, each by the name it is subscripted under.
+    """Generic types `type-aliases` takes as it takes the standard library's, each as its module and its name there.
 
-    With `NDArray` here, `Grid = npt.NDArray[np.float64]` is an alias to rewrite: the name is the last one before the
-    bracket, whatever it is reached through.
+    With `numpy.typing.NDArray` here, `Grid = NDArray[np.float64]` is an alias to rewrite in a module that imports
+    `NDArray` from `numpy.typing`, under any name, or reaches it through an import of `numpy`. A type the module
+    imports from elsewhere, or does not import, is left alone, whatever its name.
     """
 
 

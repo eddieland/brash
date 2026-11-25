@@ -228,9 +228,9 @@ def test_an_entry_that_names_no_codemod_fails_the_run_and_says_which(project: Pa
             id="patterns with no codemods",
         ),
         pytest.param(
-            "[tool.brash]\nextend-generics = ['np.ndarray']\n",
-            "tool.brash.extend-generics.0: `np.ndarray` is not a name such as `NDArray`",
-            id="a dotted generic",
+            "[tool.brash]\nextend-generics = ['NDArray']\n",
+            "tool.brash.extend-generics.0: `NDArray` is not a module and a name there, such as `numpy.typing.NDArray`",
+            id="a generic with no module",
         ),
         pytest.param(
             "[tool.brash.per-file-ignores]\n'tests/*' = 'rename'\n",
@@ -586,24 +586,25 @@ def test_a_target_on_the_command_line_that_names_no_python_is_refused(project: P
 
 
 def test_extend_generics_names_generics_type_aliases_takes_over_few_files_and_many(project: Path) -> None:
-    configure(project, "[tool.brash]\nextend-generics = ['Table']\n")
+    configure(project, "[tool.brash]\nextend-generics = ['app.tables.Table']\n")
+    imported = "from app.tables import Table\n\n"
     few = project / "few"
     many = project / "many"
     few.mkdir()
     many.mkdir()
-    (few / "rows.py").write_text("Rows = Table[Row]\nGrid = Frame[Row]\n")
+    (few / "rows.py").write_text(f"{imported}Rows = Table[Row]\nGrid = Frame[Row]\n")
     for number in range(12):
-        (many / f"rows{number}.py").write_text("Rows = Table[Row]\n")
+        (many / f"rows{number}.py").write_text(f"{imported}Rows = Table[Row]\n")
 
     assert invoke("few")[0] == 0
     assert invoke("many")[0] == 0
 
-    assert (few / "rows.py").read_text() == "type Rows = Table[Row]\nGrid = Frame[Row]\n"
-    assert {path.read_text() for path in many.iterdir()} == {"type Rows = Table[Row]\n"}
+    assert (few / "rows.py").read_text() == f"{imported}type Rows = Table[Row]\nGrid = Frame[Row]\n"
+    assert {path.read_text() for path in many.iterdir()} == {f"{imported}type Rows = Table[Row]\n"}
     assert invoke("--check", ".") == (0, "")
 
 
 def test_without_extend_generics_a_projects_own_generic_is_left_alone(project: Path) -> None:
-    (project / "rows.py").write_text("Rows = Table[Row]\n")
+    (project / "rows.py").write_text("from app.tables import Table\n\nRows = Table[Row]\n")
 
     assert invoke("--check", ".") == (0, "")

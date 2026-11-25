@@ -16,7 +16,8 @@ kept to where that cannot show. It leaves alone:
   `type` statement, is not one, since neither is evaluated until asked for;
 - an `Annotated[...]` alias, whose metadata frameworks read at run time, and a subscript of anything else that is
   not the standard library's (`Table[Row]`, `np.ndarray[int]`), which may be no type at all. A project names its
-  own generic types, and those of the libraries it uses, in its `extend-generics`, and they are taken as well;
+  own generic types, and those of the libraries it uses, in its `extend-generics`, each as its module and its name
+  there (`numpy.typing.NDArray`), and one the module imports from there is taken as well;
 - a union that may be arithmetic on values: one with no `None`, no subscript, and no builtin type among its members;
 - a `Union[...]` of one member, which is that member and no union;
 - an alias with a quoted name as a member of a `Union[...]` or `Optional[...]`, at any depth. ruff's fix for those
@@ -38,8 +39,9 @@ from __future__ import annotations
 import ast
 import re
 from collections import defaultdict
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from collections.abc import Set as AbstractSet
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final, override
 
 import libcst as cst
@@ -125,7 +127,8 @@ def aliases(source: str, generics: Collection[str] = ()) -> frozenset[str]:
 
     Args:
         source: The module's text.
-        generics: Generic types to take as the standard library's are, by name: a project's `extend-generics`.
+        generics: Generic types to take as the standard library's are, each as its module and its name there: a
+            project's `extend-generics`.
 
     Returns:
         The names, each bound once in the module by the assignment to rewrite.
@@ -134,7 +137,7 @@ def aliases(source: str, generics: Collection[str] = ()) -> frozenset[str]:
         SyntaxError: When the text is not Python.
     """
     module = ast.parse(source)
-    heads = HEADS.union(generics)
+    known = _Known(frozenset(generics), _imports(module) if generics else {})
     bindings = Bindings()
     bindings.visit(module)
     variables = {
@@ -150,7 +153,7 @@ def aliases(source: str, generics: Collection[str] = ()) -> frozenset[str]:
         for statement in module.body
         if (assigned := _assigned(statement)) is not None
         and bindings.counts[assigned[0]] == 1
-        and _is_alias(*assigned, heads)
+        and _is_alias(*assigned, known)
         and not variables & {node.id for node in ast.walk(assigned[1]) if isinstance(node, ast.Name)}
         for name in [assigned[0]]
     }
@@ -266,8 +269,84 @@ def _assigned(statement: ast.stmt) -> tuple[str, ast.expr] | None:
             return None
 
 
-def _is_alias(name: str, value: ast.expr, heads: Collection[str]) -> bool:
-    """Whether an assignment reads as a type alias this codemod rewrites, where `heads` are the subscripts it takes.
+@dataclass(frozen=True)
+class _Origin:
+    """What an import binds a name to."""
+
+    #: The module, or the module and the name there, dotted: `numpy.typing` for `import numpy.typing as npt`.
+    path: str
+    #: Whether the import is relative, so that the path is only the end of the module's own.
+    relative: bool
+
+
+@dataclass(frozen=True)
+class _Known:
+    """The generic types a project names, and what tells one in a module."""
+
+    #: Each as its module and its name there: the project's `extend-generics`.
+    generics: frozenset[str]
+    #: What each name the module imports is bound to; a name imported from two places is not here.
+    imports: Mapping[str, _Origin]
+
+    def holds(self, head: ast.expr) -> bool:
+        """Whether what is subscripted is one of the generic types, reached through the module's imports.
+
+        A relative import gives only the end of a module's path, so `from .tables import Table` is
+        `app.tables.Table` and any other `tables.Table`.
+
+        Returns:
+            True when it is one; False for a name the module does not import.
+        """
+        parts = _dotted(head)
+        origin = self.imports.get(parts[0]) if parts else None
+        if origin is None:
+            return False
+        path = ".".join([origin.path, *parts[1:]])
+        if origin.relative:
+            return any(f".{generic}".endswith(f".{path}") for generic in self.generics)
+        return path in self.generics
+
+
+def _imports(module: ast.Module) -> dict[str, _Origin]:
+    """What each name a module imports is bound to, wherever in it the import is.
+
+    Returns:
+        The origins by name, but for a name two imports bind to different things, and what a `*` brings.
+    """
+    found: dict[str, set[_Origin]] = defaultdict(set)
+    for node in ast.walk(module):
+        match node:
+            case ast.Import(names=names):
+                for alias in names:
+                    # `import a.b` binds `a`; `import a.b as c` binds `c` to `a.b`.
+                    path = alias.name if alias.asname else alias.name.partition(".")[0]
+                    found[alias.asname or path].add(_Origin(path, relative=False))
+            case ast.ImportFrom(module=source, names=names, level=level):
+                for alias in names:
+                    path = ".".join(part for part in (source, alias.name) if part)
+                    found[alias.asname or alias.name].add(_Origin(path, relative=level > 0))
+            case _:
+                pass
+    return {name: origin for name, (origin, *others) in found.items() if not others and name != "*"}
+
+
+def _dotted(expression: ast.expr) -> list[str]:
+    """The names of a dotted one, in order: `np`, `typing`, `NDArray` of `np.typing.NDArray`.
+
+    Returns:
+        The names, or none for an expression that is not a dotted name.
+    """
+    match expression:
+        case ast.Name(id=name):
+            return [name]
+        case ast.Attribute(value=value, attr=name) if parts := _dotted(value):
+            return [*parts, name]
+        case _:
+            return []
+
+
+def _is_alias(name: str, value: ast.expr, known: _Known) -> bool:
+    """Whether an assignment reads as a type alias this codemod rewrites, with the generics a project names.
 
     Returns:
         True for a `CamelCase` name given a `Literal`, a standard generic type, or a union that is one of types,
@@ -280,7 +359,7 @@ def _is_alias(name: str, value: ast.expr, heads: Collection[str]) -> bool:
             # `Union[X]` is `X`, which may be a class the module calls, and a type checker rejects it as an alias.
             return (last_name(head) == "Optional" or isinstance(inner, ast.Tuple)) and _is_type(value)
         case ast.Subscript(value=head):
-            return last_name(head) in heads and _is_type(value)
+            return (last_name(head) in HEADS or known.holds(head)) and _is_type(value)
         case ast.BinOp(op=ast.BitOr()):
             return _is_type(value) and any(_marks_a_union(member) for member in _members(value))
         case _:

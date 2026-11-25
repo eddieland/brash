@@ -943,10 +943,12 @@ already: a name read only inside a quoted annotation of an alias that stays an a
 beside `OuterDict = dict[str, 'IntList']`, in pydantic's tests) is rewritten, since a quoted name is not counted as a
 read. It does not fire on brash's own code.
 
-A subscript of anything else is taken where a project names it: `extend-generics = ["NDArray"]` in its `[tool.brash]`
-adds to the table, for its own generic types and those of the libraries it uses. It is the first setting a codemod
-reads, which a codemod has as `self.config` and is asked about in `Command.wants_in`. A switch to take any subscript
-at all was not built: no table would then decide, and `Cell = sheet.cells["Cell"]` reads as a type.
+A subscript of anything else is taken where a project names it: `extend-generics = ["numpy.typing.NDArray"]` in its
+`[tool.brash]` adds to the table, for its own generic types and those of the libraries it uses. Each is a module and a
+name there, found through the module's own imports, so a type of the same name from elsewhere is left alone. It is the
+first setting a codemod reads, which a codemod has as `self.config` and is asked about in `Command.wants_in`. A switch
+to take any subscript at all was not built: no table would then decide, and `Cell = sheet.cells["Cell"]` reads as a
+type.
 
 ## Defects found in the existing codemods
 

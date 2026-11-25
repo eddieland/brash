@@ -12,7 +12,7 @@ from tests.helpers import cases
 NAME: Final = "type-aliases"
 CASES: Final = cases(NAME)
 #: A project that names two generic types of its own, and the cases that hold in it.
-EXTENDED: Final = Config.model_validate({"extend-generics": ["NDArray", "Table"]})
+EXTENDED: Final = Config.model_validate({"extend-generics": ["numpy.typing.NDArray", "app.tables.Table"]})
 EXTENDED_CASES: Final = cases(f"{NAME}-extend-generics")
 
 
@@ -49,7 +49,7 @@ def test_what_is_not_an_alias_in_a_project_that_names_generics_is_left_alone(sou
 
 
 def test_a_generic_the_project_names_is_left_alone_where_no_project_names_it() -> None:
-    source = "Rows = Table[Row]\n"
+    source = "from app.tables import Table\n\nRows = Table[Row]\n"
 
     assert TypeAliases.wants_in(source, EXTENDED)
     assert not TypeAliases.wants(source)
