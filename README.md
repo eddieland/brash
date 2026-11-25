@@ -117,6 +117,10 @@ no-print = "codemods.no_print:NoPrint"
   matches, and everything under that directory. Its `*` matches any run of characters, slashes among them, so
   `*_pb2.py` excludes such a file at any depth and `top.py` only the one beside the `pyproject.toml`. An excluded
   file is left alone when it is named outright too, as a git hook names it.
+- **`extend-generics`** names generic types `type-aliases` takes as it takes the standard library's, such as
+  `extend-generics = ["NDArray"]`: your project's own, and those of the libraries it uses. Each is the name the type
+  is subscripted under, the last one before the bracket, so `NDArray` is also `npt.NDArray[np.float64]`. A dotted
+  name fails the run.
 - **`codemods`** registers [your project's own codemods](#your-projects-own-codemods).
 
 A project that keeps each tool's settings in a file of its own has a `brash.toml` instead, with the same settings at
@@ -209,7 +213,8 @@ The hook runs in an environment of its own, which holds brash and nothing of you
   statement makes a `TypeAliasType`, not the type it names, so it leaves alone a name the
   module reads outside an annotation (passed to `get_args` or `isinstance`, called, subclassed, held in another
   assignment); an `Annotated[...]` alias, whose metadata frameworks read as the program runs; a subscript of anything
-  else that is not the standard library's (`Table[Row]`), which may be no type at all; and a union that may be
+  else that is not the standard library's (`Table[Row]`), which may be no type at all, unless the project's
+  [`extend-generics`](#configuration) names it; and a union that may be
   of values, with no `None`, subscript, or builtin type in it, or a `Union[...]` of one member. It leaves alone an
   alias with a quoted name as a member
   of a `Union[...]` or `Optional[...]`, since ruff then writes `str | "Text"`, which raises when the alias is read. It
@@ -327,13 +332,16 @@ Two rules keep the check honest and quick, for your codemods as for brash's:
   left to annotate is never parsed by LibCST. A codemod without a `wants` parses every file on every lint. A codemod
   held to some files alone says which in `Command.covers(filename)`, asked before the text is read.
 
+A codemod that reads one of the project's settings has them as `self.config`, a `brash.config.Config`, and answers
+in `Command.wants_in(source, config)` where `wants` would need one: `type-aliases` reads `extend-generics` so.
+
 A codemod that writes syntax an older Python does not have names the first that has it, as `MINIMUM_PYTHON = (3, 12)`
 on the class, and does not run in a project whose `target-version` is older. One for a convention a project
 chooses to hold, which most do not, says so as `OPT_IN = True`: it is off by default, and runs only where `select`
 or `extend-select` names it, or `--only` does.
 
 To test one, run a module's text through it: `brash.run.rewrite(source, ["no-print"], codemods={"no-print": NoPrint})`
-gives the text back rewritten.
+gives the text back rewritten, and takes the settings to run under as `config=`.
 
 A rewrite to run once, such as a migration off an API, needs no entry: LibCST's own
 [`python -m libcst.tool codemod`](https://libcst.readthedocs.io/en/latest/codemods_tutorial.html) runs it, and you

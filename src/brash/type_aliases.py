@@ -15,7 +15,8 @@ kept to where that cannot show. It leaves alone:
   called, subclassed, or assigned to another name. A read inside another alias this codemod rewrites, or inside a
   `type` statement, is not one, since neither is evaluated until asked for;
 - an `Annotated[...]` alias, whose metadata frameworks read at run time, and a subscript of anything else that is
-  not the standard library's (`Table[Row]`, `np.ndarray[int]`), which may be no type at all;
+  not the standard library's (`Table[Row]`, `np.ndarray[int]`), which may be no type at all. A project names its
+  own generic types, and those of the libraries it uses, in its `extend-generics`, and they are taken as well;
 - a union that may be arithmetic on values: one with no `None`, no subscript, and no builtin type among its members;
 - a `Union[...]` of one member, which is that member and no union;
 - an alias with a quoted name as a member of a `Union[...]` or `Optional[...]`, at any depth. ruff's fix for those
@@ -37,13 +38,17 @@ from __future__ import annotations
 import ast
 import re
 from collections import defaultdict
+from collections.abc import Collection
 from collections.abc import Set as AbstractSet
-from typing import Final, override
+from typing import TYPE_CHECKING, Final, override
 
 import libcst as cst
 
 from brash.command import Command
 from brash.final_constants import CONSTANT, DECLARES, Bindings, last_name
+
+if TYPE_CHECKING:
+    from brash.config import Config
 
 #: What the text of a module with an alias to rewrite must hold: a capitalised name assigned at the margin.
 ASSIGNED: Final = re.compile(r"^_*[A-Z]\w*[ \t]*=[^=]", re.MULTILINE)
@@ -84,12 +89,17 @@ class TypeAliases(Command):
         Returns:
             True when it has one, or may have one and does not parse, which is then libcst's to report.
         """
-        if not ASSIGNED.search(source):
-            return False
-        try:
-            return bool(aliases(source))
-        except SyntaxError:
-            return True
+        return _wants(source, ())
+
+    @classmethod
+    @override
+    def wants_in(cls, source: str, config: Config) -> bool:
+        """Whether a module with this text has an alias to rewrite, in a project with these settings.
+
+        Returns:
+            What `wants` says, with the project's `extend-generics` taken as the standard library's generics are.
+        """
+        return _wants(source, config.extend_generics)
 
     @override
     def transform_module_impl(self, tree: cst.Module) -> cst.Module:
@@ -98,7 +108,7 @@ class TypeAliases(Command):
         Returns:
             The module rewritten, or as it was when it has no alias to rewrite.
         """
-        names = aliases(tree.code)
+        names = aliases(tree.code, self.config.extend_generics)
         if not names:
             return tree
         body = [
@@ -110,8 +120,12 @@ class TypeAliases(Command):
         return tree.with_changes(body=body)
 
 
-def aliases(source: str) -> frozenset[str]:
+def aliases(source: str, generics: Collection[str] = ()) -> frozenset[str]:
     """The names of a module's implicit type aliases that can become `type` statements, from its text.
+
+    Args:
+        source: The module's text.
+        generics: Generic types to take as the standard library's are, by name: a project's `extend-generics`.
 
     Returns:
         The names, each bound once in the module by the assignment to rewrite.
@@ -120,6 +134,7 @@ def aliases(source: str) -> frozenset[str]:
         SyntaxError: When the text is not Python.
     """
     module = ast.parse(source)
+    heads = HEADS.union(generics)
     bindings = Bindings()
     bindings.visit(module)
     variables = {
@@ -135,7 +150,7 @@ def aliases(source: str) -> frozenset[str]:
         for statement in module.body
         if (assigned := _assigned(statement)) is not None
         and bindings.counts[assigned[0]] == 1
-        and _is_alias(*assigned)
+        and _is_alias(*assigned, heads)
         and not variables & {node.id for node in ast.walk(assigned[1]) if isinstance(node, ast.Name)}
         for name in [assigned[0]]
     }
@@ -224,6 +239,20 @@ class _Readers(ast.NodeVisitor):
         self._reader = before
 
 
+def _wants(source: str, generics: Collection[str]) -> bool:
+    """Whether a module with this text has an alias to rewrite, with those generics beside the standard library's.
+
+    Returns:
+        True when it has one, or may have one and does not parse.
+    """
+    if not ASSIGNED.search(source):
+        return False
+    try:
+        return bool(aliases(source, generics))
+    except SyntaxError:
+        return True
+
+
 def _assigned(statement: ast.stmt) -> tuple[str, ast.expr] | None:
     """The name a statement assigns and its value, when it is a plain assignment to one name.
 
@@ -237,8 +266,8 @@ def _assigned(statement: ast.stmt) -> tuple[str, ast.expr] | None:
             return None
 
 
-def _is_alias(name: str, value: ast.expr) -> bool:
-    """Whether an assignment reads as a type alias this codemod rewrites.
+def _is_alias(name: str, value: ast.expr, heads: Collection[str]) -> bool:
+    """Whether an assignment reads as a type alias this codemod rewrites, where `heads` are the subscripts it takes.
 
     Returns:
         True for a `CamelCase` name given a `Literal`, a standard generic type, or a union that is one of types,
@@ -251,7 +280,7 @@ def _is_alias(name: str, value: ast.expr) -> bool:
             # `Union[X]` is `X`, which may be a class the module calls, and a type checker rejects it as an alias.
             return (last_name(head) == "Optional" or isinstance(inner, ast.Tuple)) and _is_type(value)
         case ast.Subscript(value=head):
-            return last_name(head) in HEADS and _is_type(value)
+            return last_name(head) in heads and _is_type(value)
         case ast.BinOp(op=ast.BitOr()):
             return _is_type(value) and any(_marks_a_union(member) for member in _members(value))
         case _:

@@ -18,7 +18,10 @@ from brash.config import ConfigError
 from brash.registry import CODEMODS, RegistryError
 
 #: Every setting there is, as the message about one there is not lists them.
-SETTINGS: Final = "`codemods`, `select`, `extend-select`, `ignore`, `per-file-ignores`, `target-version`, `exclude`"
+SETTINGS: Final = (
+    "`codemods`, `select`, `extend-select`, `ignore`, `per-file-ignores`, `target-version`, `exclude`, "
+    "`extend-generics`"
+)
 
 #: A project's codemod, which renames the constant `OLD`, and so runs on what `final-constants` wrote.
 LOCAL: Final = '''\
@@ -223,6 +226,11 @@ def test_an_entry_that_names_no_codemod_fails_the_run_and_says_which(project: Pa
             "[tool.brash]\nper-file-ignores = ['tests/*']\n",
             "tool.brash.per-file-ignores: Input should be a valid dictionary",
             id="patterns with no codemods",
+        ),
+        pytest.param(
+            "[tool.brash]\nextend-generics = ['np.ndarray']\n",
+            "tool.brash.extend-generics.0: `np.ndarray` is not a name such as `NDArray`",
+            id="a dotted generic",
         ),
         pytest.param(
             "[tool.brash.per-file-ignores]\n'tests/*' = 'rename'\n",
@@ -575,3 +583,27 @@ def test_a_target_on_the_command_line_that_names_no_python_is_refused(project: P
 
     assert code == 2
     assert "`3.10` is not a Python version such as `py310`." in output
+
+
+def test_extend_generics_names_generics_type_aliases_takes_over_few_files_and_many(project: Path) -> None:
+    configure(project, "[tool.brash]\nextend-generics = ['Table']\n")
+    few = project / "few"
+    many = project / "many"
+    few.mkdir()
+    many.mkdir()
+    (few / "rows.py").write_text("Rows = Table[Row]\nGrid = Frame[Row]\n")
+    for number in range(12):
+        (many / f"rows{number}.py").write_text("Rows = Table[Row]\n")
+
+    assert invoke("few")[0] == 0
+    assert invoke("many")[0] == 0
+
+    assert (few / "rows.py").read_text() == "type Rows = Table[Row]\nGrid = Frame[Row]\n"
+    assert {path.read_text() for path in many.iterdir()} == {"type Rows = Table[Row]\n"}
+    assert invoke("--check", ".") == (0, "")
+
+
+def test_without_extend_generics_a_projects_own_generic_is_left_alone(project: Path) -> None:
+    (project / "rows.py").write_text("Rows = Table[Row]\n")
+
+    assert invoke("--check", ".") == (0, "")

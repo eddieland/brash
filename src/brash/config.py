@@ -47,12 +47,19 @@ SHARED: Final = "pyproject.toml"
 CONFIGS: Final = (DEDICATED, SHARED)
 _ENTRY: Final = re.compile(r"[^\W\d]\w*(\.[^\W\d]\w*)*:[^\W\d]\w*")
 _TARGET: Final = re.compile(r"py3(\d{1,2})")
+_NAME: Final = re.compile(r"[^\W\d]\w*")
 
 
 def _module_and_class(entry: str) -> str:
     if not _ENTRY.fullmatch(entry):
         raise PydanticCustomError("codemod_entry", "`{entry}` is not a `module:Class`", {"entry": entry})
     return entry
+
+
+def _generic(name: str) -> str:
+    if not _NAME.fullmatch(name):
+        raise PydanticCustomError("generic_name", "`{name}` is not a name such as `NDArray`", {"name": name})
+    return name
 
 
 def _target(target: str) -> str:
@@ -100,6 +107,12 @@ class Config(BaseModel):
 
     A pattern excludes the file or directory it matches, and everything under that directory. Its `*` matches any run
     of characters, slashes among them, so `*_pb2.py` excludes such a file at any depth.
+    """
+    extend_generics: tuple[Annotated[str, AfterValidator(_generic)], ...] = Field(default=(), alias="extend-generics")
+    """Generic types `type-aliases` takes as it takes the standard library's, each by the name it is subscripted under.
+
+    With `NDArray` here, `Grid = npt.NDArray[np.float64]` is an alias to rewrite: the name is the last one before the
+    bracket, whatever it is reached through.
     """
 
 

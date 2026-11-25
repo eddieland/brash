@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING, Final
 from libcst.codemod import CodemodContext, TransformExit, TransformFailure, TransformSkip, TransformSuccess
 from libcst.codemod import transform_module as apply
 
+from brash.command import SETTINGS
+from brash.config import Config
 from brash.registry import CODEMODS
 
 if TYPE_CHECKING:
@@ -61,6 +63,7 @@ def rewrite_all(
     names: Sequence[str],
     codemods: Mapping[str, type[Command]] = CODEMODS,
     ignored: Mapping[Path, Collection[str]] | None = None,
+    config: Config | None = None,
 ) -> list[Rewrite]:
     """Run the codemods named over every Python file under `paths`, changing none.
 
@@ -70,6 +73,7 @@ def rewrite_all(
         codemods: Each codemod there is by name: brash's own, unless a project's are given with them.
         ignored: The codemods of `names` that do not run on a file, by the file's path as `files` gives it. Every
             one of them runs on a file that is not there.
+        config: The project's settings, for a codemod that reads one: every one at its default, when not given.
 
     Returns:
         A rewrite for each file, in the files' order.
@@ -78,9 +82,10 @@ def rewrite_all(
     off = ignored or {}
     each = [[name for name in names if name not in off[path]] if path in off else names for path in found]
     if len(found) < _SERIAL:
-        return [rewrite_file(path, chosen, codemods) for path, chosen in zip(found, each, strict=True)]
+        return [rewrite_file(path, chosen, codemods, config) for path, chosen in zip(found, each, strict=True)]
     with ProcessPoolExecutor() as pool:
-        return list(pool.map(rewrite_file, found, each, [codemods] * len(found), chunksize=16))
+        every = len(found)
+        return list(pool.map(rewrite_file, found, each, [codemods] * every, [config] * every, chunksize=16))
 
 
 def files(paths: Iterable[Path]) -> list[Path]:
@@ -103,8 +108,13 @@ def files(paths: Iterable[Path]) -> list[Path]:
     return sorted(found)
 
 
-def rewrite_file(path: Path, names: Collection[str], codemods: Mapping[str, type[Command]] = CODEMODS) -> Rewrite:
-    """Run the codemods named over the file at `path`, without changing it.
+def rewrite_file(
+    path: Path,
+    names: Collection[str],
+    codemods: Mapping[str, type[Command]] = CODEMODS,
+    config: Config | None = None,
+) -> Rewrite:
+    """Run the codemods named over the file at `path`, without changing it, under the project's settings if given.
 
     Returns:
         The file's text before and after, or the error that stopped a codemod.
@@ -114,7 +124,7 @@ def rewrite_file(path: Path, names: Collection[str], codemods: Mapping[str, type
     except (OSError, UnicodeDecodeError) as e:
         return Rewrite(path, "", "", error=str(e))
     try:
-        return Rewrite(path, before, rewrite(before, names, filename=str(path), codemods=codemods))
+        return Rewrite(path, before, rewrite(before, names, filename=str(path), codemods=codemods, config=config))
     except CodemodError as e:
         return Rewrite(path, before, before, error=str(e))
 
@@ -129,8 +139,16 @@ def rewrite(
     *,
     filename: str | None = None,
     codemods: Mapping[str, type[Command]] = CODEMODS,
+    config: Config | None = None,
 ) -> str:
     """Run the codemods named, of `codemods`, over a module's text, each on what the one before it made.
+
+    Args:
+        source: The module's text.
+        names: The codemods to run, of `codemods`, in order.
+        filename: The file's path, for a codemod held to some files, or None for text with no file.
+        codemods: Each codemod there is by name: brash's own, unless a project's are given with them.
+        config: The project's settings, for a codemod that reads one: every one at its default, when not given.
 
     Returns:
         The module's text after the last of them.
@@ -138,11 +156,12 @@ def rewrite(
     Raises:
         CodemodError: When one of them could not run.
     """
+    settings = config or Config()
     for name in names:
         codemod = codemods[name]
-        if not codemod.covers(filename) or not codemod.wants(source):
+        if not codemod.covers(filename) or not codemod.wants_in(source, settings):
             continue
-        result = apply(codemod(CodemodContext(filename=filename)), source)
+        result = apply(codemod(CodemodContext(filename=filename, scratch={SETTINGS: settings})), source)
         match result:
             case TransformSuccess():
                 source = result.code
