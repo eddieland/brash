@@ -45,6 +45,7 @@ entry, and its PR says how the numbers it relies on were checked again, or that 
 6. **Take the `Union[...]` and `Optional[...]` rider into `type-aliases`.** About 12 lines once the first defect of
    step 1 has added the quoted-member guard it shares. Rare, so only if a maintainer says the rate bar does not apply
    to one more row of a table.
+   - [x] Done, the rate bar judged not to apply. See "Built" in its entry.
 7. **The two opt-in ideas**, after step 2, each behind a decision. Narrower `Sequence` and `Collection` first: it is
    the AGENTS.md rule and the only idea that fires on brash, but it needs brash to remove an import it orphans
    (decision D). `docstring-types` second: it needs a Google docstring parser and decision E.
@@ -171,7 +172,7 @@ running it by default, not against building it as opt-in.
 | `empty-collections` | New | Build | Annotates an empty list, dict or set from the return annotation or a `join` | 214 sites, 53 of 54 right, invisible outside the function |
 | `explicit-override` | New | Build | `@override` where the base class is in the same module | 775 sites, 0 wrong, no new diagnostics |
 | Star-unpacking and `tuple[X, ...]` | `general-params` | Build | Counts `*p` and `**p` as reads; widens `tuple[X, ...]` | 157 sites, 78 of 82 right |
-| `Union[...]` and `Optional[...]` aliases | `type-aliases` | Rider | Takes an alias ruff reports and cannot fix | 59 of 59 right, about 12 lines, but 59 sites |
+| `Union[...]` and `Optional[...]` aliases | `type-aliases` | Rider | Takes an alias ruff reports and cannot fix | 59 of 59 right, about 12 lines, but 59 sites; built, the rate bar judged not to apply to a row of a table |
 | Optional collections | `general-params` | Rider | Widens `list[X] \| None` | 27 of 31 right, but 31 sites; built after its parent, the pinned case judged spelling |
 | `sorted-sets` | New | Shelved | Sorts a set display's elements | 12 of 64 destroyed a meaningful order |
 | `single-with` | New | Shelved | Merges nested `with` statements | ruff's fix already does 81% at 120 columns |
@@ -458,6 +459,29 @@ rewritten and 8 kept.
 
 **Reopen if** the rate bar is judged not to apply to one more entry in a table. The quoted-member guard it needs is in the
 parent already, as the fix of the first defect.
+
+**Built** in `_is_alias` of `src/brash/type_aliases.py`, 3 lines and a comment, from this entry and not from the
+prototype, which was not kept. The maintainer left the open decisions to the agent's judgement, and this one is
+decided as the condition above reads: the rate bar does not apply. The bar weighs a codemod's cases against how often
+a maintainer sees it run, and this is no codemod: it is one more spelling of a union in a codemod that reads unions
+already, behind a guard that shipped with the first defect's fix. The optional-collections rider was built at 0.42
+sites per 100 files, and this one is at 0.79. It is the form the entry describes, with nothing left out:
+
+- A `Union[...]` of two members or more, and an `Optional[...]`, are aliases, by the last name of what is subscripted,
+  so `typing.Union` and `t.Optional` are read too.
+- `Union[X]` with one member is left alone. An alias with a quoted name directly inside a `Union` or `Optional` is
+  left alone by the guard, now also where the `Union` is the alias itself: `Node = Union["Node", int]`.
+- Everything else is the parent's: a name read at run time, a generic alias, and a member that is no type stay.
+
+Checked again on the current sdists of the 30 projects, 7,424 files that parse: 187 sites in 116 files before, 246 in
+141 after, so 59 new sites in 30 files, 6 of them in tests or examples; no site is lost. The count is the entry's.
+Every rewritten file parses, and a second run changes nothing, also after ruff 0.17.6's fix of UP007 and UP045, its
+import fix and its format. ruff then writes the `|` in 58 of the 59, and none of them has a quoted name beside a `|`.
+The one it reports and does not fix is httpx's `FileTypes`, a `Union[...]` with a comment above each member. All 59
+were read as a list of the assignments, not with the code around them: each is a union of types. The three type
+checkers were not run on the corpus again, and no test suite was.
+
+It does not fire on brash's own code.
 
 ### general-params: optional collections
 
@@ -899,11 +923,25 @@ The scout that found the two extensions above also measured these and dropped th
 | `general-params` | Decorated functions | 189 parameters, 160 under `click.option`; right as it is |
 | `general-params` | Bare `list` or `dict`, quoted annotations, `@final` classes | At most 22, 4 and 8 sites |
 | `type-aliases` | A generic alias over a module `TypeVar` | 22 sites, and it leaves the `TypeVar` behind |
-| `type-aliases` | Other subscripts read only in annotations | 48 sites; pinned by "Another subscript" |
+| `type-aliases` | Other subscripts read only in annotations | 48 sites; pinned by "Another subscript". Built since for the standard library's generic types, at the maintainer's ask: see below |
 | `final-constants` | Names under `if`, `try` or `TYPE_CHECKING` | 139 names, 9 eligible; the rest are bound in two arms |
 | `final-constants` | Class-level constants | 110 in plain classes, but `Final` forbids an override in another module; 2 sites in `@final` classes |
 | `doc-comments` | A trailing comment moved above as `#:` | 94 sites, but the README makes that the place for a why-note |
 | `doc-comments` | Unannotated `self.x`, TypedDict and Protocol members, plain-class attributes | Nothing marks them as declarations, or too rare |
+
+The `type-aliases` lead on other subscripts was built after all, on 2026-11-24, because the maintainer asked for it:
+`Index = dict[str, int]` and `Lookup = Mapping[str, Row]` are aliases now, by a table of the standard library's
+generic types (`GENERICS` in `src/brash/type_aliases.py`), the names `typing` has for them among them. The case that
+pinned it, "Another subscript", now holds a subscript of something else, `Table[Row]`, which is still left alone, as
+`Annotated[...]` is. On the current sdists of the 30 projects, 7,424 files that parse: 246 sites in 141 files before,
+321 in 169 after, so 75 new sites in 51 files, 11 of them in tests; no site is lost. 21 are under typing's `Tuple`,
+`Dict`, `List` and `Set`, which `HEADS` did not have, and 7 are a `Union`, an `Optional` or a `Literal` that stayed
+before only because an alias left alone read it. Every rewritten file parses, and a second run changes nothing, also
+after ruff 0.17.6's fixes of UP006, UP007, UP035 and UP045, its import fix and its format. All 75 were read as a list
+of the assignments, and each is a type. The type checkers were not run. One site shows a limit the codemod had
+already: a name read only inside a quoted annotation of an alias that stays an assignment (`IntList = list[int]`
+beside `OuterDict = dict[str, 'IntList']`, in pydantic's tests) is rewritten, since a quoted name is not counted as a
+read. It does not fire on brash's own code.
 
 ## Defects found in the existing codemods
 

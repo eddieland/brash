@@ -55,6 +55,50 @@ Endpoint = Callable[[str], 'Reply']
 type Endpoint = Callable[[str], 'Reply']
 ```
 
+### Builtin generic
+
+```python
+Index = dict[str, int]
+Rows = list[Row]
+Names = frozenset[str]
+Kind = type[Row]
+```
+
+```python
+type Index = dict[str, int]
+type Rows = list[Row]
+type Names = frozenset[str]
+type Kind = type[Row]
+```
+
+### Generic of the standard library
+
+```python
+Lookup = Mapping[str, "Row"]
+Stream = collections.abc.AsyncIterator[bytes]
+Groups = defaultdict[str, list[Row]]
+Found = re.Match[str]
+```
+
+```python
+type Lookup = Mapping[str, "Row"]
+type Stream = collections.abc.AsyncIterator[bytes]
+type Groups = defaultdict[str, list[Row]]
+type Found = re.Match[str]
+```
+
+### Generic under its typing name
+
+```python
+Index = Dict[str, List[int]]
+Pair = typing.Tuple[str, int]
+```
+
+```python
+type Index = Dict[str, List[int]]
+type Pair = typing.Tuple[str, int]
+```
+
 ### Union of builtins
 
 ```python
@@ -83,6 +127,60 @@ Rows = Row | list[Row]
 
 ```python
 type Rows = Row | list[Row]
+```
+
+### Union subscript
+
+```python
+StrPath = Union[str, os.PathLike[str]]
+```
+
+```python
+type StrPath = Union[str, os.PathLike[str]]
+```
+
+### Optional
+
+```python
+NoneStr = Optional[str]
+```
+
+```python
+type NoneStr = Optional[str]
+```
+
+### Dotted union and optional
+
+```python
+Value = typing.Union[int, bytes, None]
+Found = t.Optional[Value]
+```
+
+```python
+type Value = typing.Union[int, bytes, None]
+type Found = t.Optional[Value]
+```
+
+### Union of unions
+
+```python
+Key = Union[str, Optional[int], list["Row"]]
+```
+
+```python
+type Key = Union[str, Optional[int], list["Row"]]
+```
+
+### Union and optional of literals
+
+```python
+Mode = Union[Literal["r", "w"], Literal["a"]]
+Maybe = Optional[Literal["on", "off"]]
+```
+
+```python
+type Mode = Union[Literal["r", "w"], Literal["a"]]
+type Maybe = Optional[Literal["on", "off"]]
 ```
 
 ### Keeps comments and layout
@@ -258,8 +356,28 @@ Dep = Annotated[Options, Depends(options)]
 ### Another subscript
 
 ```python
+Rows = Table[Row]
+Grid = np.ndarray[int]
+Cell = sheet.cells["Cell"]
+```
+
+### Standard generic that holds no type
+
+```python
+First = list[0]
+Width = dict[str, 1 + 2]
+```
+
+### Standard generic read at run time
+
+```python
 Index = dict[str, int]
 Rows = list[Row]
+EMPTY = Index()
+
+
+def f(x: object) -> Rows:
+    return cast(Rows, x)
 ```
 
 ### Union that may be of values
@@ -275,6 +393,40 @@ Either = Left | Right
 Highlighter = Callable[[Union[str, "Text"]], "Text"]
 Found = tuple[Optional["Row"], int]
 Rows = Row | typing.Optional['Row']
+```
+
+### Quoted member of a union alias
+
+```python
+Mixed = Union[Literal["r"], "Text"]
+Node = Union["Node", int]
+Found = Optional["Row"]
+```
+
+### Union of one member
+
+```python
+Row = Union[records.Run]
+Mode = Union[Literal["r"]]
+```
+
+### Union or optional read at run time
+
+```python
+NoneStr = Optional[str]
+StrPath = Union[str, os.PathLike[str]]
+ADAPTER = TypeAdapter(NoneStr)
+
+
+def f(x: object) -> bool:
+    return isinstance(x, get_args(StrPath))
+```
+
+### Union that is not of types
+
+```python
+Count = Union[int, 3]
+Maybe = Optional[1 + 2]
 ```
 
 ### Not a type expression
